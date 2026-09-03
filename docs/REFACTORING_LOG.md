@@ -28,17 +28,28 @@
   `DEFAULT_USER_ID` 가 `apps/api/.env` 값과 일치함 확인.
 - **모노레포 초기 정리 PR #1 병합**: `refactor/monorepo-init` → `main` (`821d548`). env 구조,
   DB 점검, tsconfig `baseUrl` 제거, 로그 문서.
-- **임베딩 모델 교체 완료** (브리핑 8-3): OpenAI `text-embedding-3-small`(1536) →
+- **임베딩 모델 교체 완료** (브리핑 8-3, PR #2 병합 `c098e38`): OpenAI `text-embedding-3-small`(1536) →
   자체 호스팅 `BM-K/KoSimCSE-roberta-multitask`(768). 아래 "임베딩 모델 교체" 섹션 참고.
-  `tone_samples` 17,943행 재임베딩 + 질의 경로 교체 + before/after 검증까지. 브랜치 `feat/embedding-kosimcse`.
+  `tone_samples` 17,943행 재임베딩 + 질의 경로 교체 + before/after 검증(격리 레벨)까지.
 
-**작업 중 브랜치**: `feat/embedding-kosimcse` — 임베딩 교체 5커밋. push 됨, PR 미생성.
+**작업 중 브랜치**: 없음. `main` = `c098e38`. `feat/embedding-kosimcse` 병합·삭제됨.
+
+### 다음 세션 시작점 (2026-09-04~)
+
+**미검증**: 임베딩 검색+GPT 체인은 스크립트로 격리 검증했으나, **앱 전체를 띄워서 실제 흐름
+(텔레그램 수신 → generateReply → 답변, 또는 웹 UI)을 돌려본 적은 없음.** 다음 세션 1순위 = 기능 테스트.
+
+**컨테이너**: `chatbot_db`, `likeme-embedding` 둘 다 필요. 재부팅했으면 `docker start chatbot_db likeme-embedding`.
 
 **다음 할 일 (우선순위 순)**
-1. `feat/embedding-kosimcse` PR → `main` 병합
+1. **기능 테스트 (미완료)** — 선행: `cd apps/api && npm approve-scripts bcrypt @swc/core @prisma/client @prisma/engines prisma` + `npm rebuild bcrypt` (npm 11 이 native 빌드 차단해둠).
+   그 다음 `npm run start:dev` → ⓐ 앱 부팅(모듈 로드, 특히 새 `EmbeddingModule`) ⓑ auth(로그인, bcrypt) ⓒ
+   텔레그램 봇 연결 ⓓ `generateReply` end-to-end(KoSimCSE 검색 + GPT) ⓔ `apps/web`(React/Vite) 기동 +
+   실시간 전달(SSE/WS). 깨지는 것 트러블슈팅 기록.
 2. `refactor/env-config`: `apps/api` Joi 검증 스키마 추가(의존성에 `joi` 이미 있음),
    `JWT_SECRET` 등 필수 env 부팅 시 검증 + `|| 'default-secret'` 폴백 제거, `.env.development` 삭제 반영,
    `apps/web/.env.example` 신설. `prisma.config.ts` 이전(에디터 env 오탐 + deprecated 경고 동시 해소).
+   `npm ci` 후 자동 빌드되도록 `postinstall` 정리.
 3. Dockerfile(백엔드) → `v1-dockerized`
 4. 루트 `docker-compose.yml`(백엔드 + DB + **embedding**) → `v2-compose`.
    **주의**: 기존 데이터 볼륨은 `likeme-like-me-api_postgres_data` (아래 트러블슈팅 #1). 새 compose 에서
