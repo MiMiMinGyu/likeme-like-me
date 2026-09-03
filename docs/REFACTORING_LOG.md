@@ -32,11 +32,14 @@
 
 **다음 할 일 (우선순위 순)**
 1. `refactor/monorepo-init` push → PR → `main` 병합 (커밋 2개: docs 로그 + `.env.example`)
-2. **임베딩 모델 교체** (브리핑 8-3, ~하루 타임박스):
-   OpenAI 임베딩 → `BM-K/KoSimCSE-roberta-multitask`, `tone_samples`(17,943행) 기준 재임베딩,
+2. **임베딩 모델 교체** (브리핑 8-3, 타임박스 사용자가 3~4일로 확장):
+   OpenAI `text-embedding-3-small`(1536) → `BM-K/KoSimCSE-roberta-multitask`(768).
+   `tone_samples` **17,943행 전부** 재임베딩 (현재 전 행에 OpenAI 벡터가 채워져 있음 — 폐기 대상).
+   질의 시점 임베딩([llm.service.ts](../apps/api/src/modules/llm/llm.service.ts) `getSimilarContext`,
+   [kakao.service.ts](../apps/api/src/modules/kakao/kakao.service.ts))도 같은 모델로 교체해야 벡터 공간 일치.
    GPT 프롬프트 연결까지만. 완벽 안 해도 됨 — "한계 + 향후 개선 방향"으로 기록.
-   **선행 필요**: 임베딩 컬럼 `vector(1536)` → `vector(768)` Prisma 마이그레이션 + HNSW 인덱스 재생성
-   (아래 "트러블슈팅 기록 #1" 의 pgvector 항목 참고). 지금 임베딩 행이 0이라 무손실.
+   **선행 필요**: `tone_samples.embedding` NULL 처리 → 컬럼 `vector(1536)` → `vector(768)` 마이그레이션
+   + HNSW 인덱스(`idx_tone_samples_embedding`) 재생성. `knowledge_chunks`·`message_embeddings` 는 0행이라 무손실.
 3. `refactor/env-config`: `apps/api` Joi 검증 스키마 추가(의존성에 `joi` 이미 있음),
    `JWT_SECRET` 등 필수 env 부팅 시 검증 + `|| 'default-secret'` 폴백 제거, `.env.development` 삭제 반영,
    `apps/web/.env.example` 신설
