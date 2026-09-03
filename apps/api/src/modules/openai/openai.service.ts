@@ -28,6 +28,8 @@ export class OpenaiService {
    * 텍스트를 임베딩 벡터로 변환
    * @param text 임베딩할 텍스트
    * @returns 1536차원 벡터와 토큰 사용량
+   * @deprecated 서비스 임베딩은 EmbeddingService(KoSimCSE 768)로 이관됨.
+   *   남겨둔 이유는 src/scripts/* 의 분석 스크립트가 OpenAI 벡터 기준으로 작성돼 있어서.
    */
   async createEmbedding(text: string): Promise<EmbeddingResponse> {
     try {
@@ -51,6 +53,7 @@ export class OpenaiService {
    * 여러 텍스트를 배치로 임베딩 생성
    * @param texts 임베딩할 텍스트 배열
    * @returns 임베딩 배열과 총 토큰 사용량
+   * @deprecated EmbeddingService.embedMany(KoSimCSE 768) 사용. 분석 스크립트 호환용으로만 잔존.
    */
   async createEmbeddings(
     texts: string[],

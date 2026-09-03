@@ -1,0 +1,5 @@
+# torch 는 Dockerfile 에서 CPU 전용 휠로 따로 설치한다 (CUDA 미포함, 이미지 ~2GB 절감)
+fastapi>=0.115,<0.116
+uvicorn[standard]>=0.34,<0.35
+transformers>=4.46,<4.49
+numpy<2.2

@@ -1,0 +1,9 @@
+# CRLF 로 깨질 수 있는 파일은 저장소·체크아웃 모두 LF 고정
+# (core.autocrlf=true 환경 대비. 전체 리포 정규화는 별도 chore 로.)
+*.sh            text eol=lf
+*.py            text eol=lf
+Dockerfile      text eol=lf
+*.Dockerfile    text eol=lf
+.dockerignore   text eol=lf
+*.yml           text eol=lf
+*.yaml          text eol=lf
