@@ -1,0 +1,299 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background-color: #f5f5f5;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+.loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: calc(100vh - 60px);
+  gap: 16px;
+  color: #666;
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid #e0e0e0;
+  border-top-color: #007bff;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.content {
+  flex: 1;
+  max-width: 800px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 32px 24px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 32px;
+}
+
+.backButton {
+  background: white;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  width: 44px;
+  height: 44px;
+  font-size: 24px;
+  color: #666;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.backButton:hover {
+  background-color: #f5f5f5;
+  border-color: #007bff;
+  color: #007bff;
+}
+
+.title {
+  font-size: 28px;
+  font-weight: 700;
+  color: #333;
+  margin: 0;
+}
+
+.card {
+  background-color: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+  margin-bottom: 24px;
+}
+
+.cardHeader {
+  padding: 24px 24px 16px 24px;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.cardTitle {
+  font-size: 20px;
+  font-weight: 600;
+  color: #333;
+  margin: 0 0 8px 0;
+}
+
+.cardDescription {
+  font-size: 14px;
+  color: #666;
+  line-height: 1.6;
+  margin: 0;
+}
+
+.cardBody {
+  padding: 24px;
+}
+
+.textarea {
+  width: 100%;
+  min-height: 300px;
+  padding: 16px;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  font-size: 14px;
+  font-family: inherit;
+  line-height: 1.6;
+  resize: vertical;
+  transition: border-color 0.2s;
+  box-sizing: border-box;
+}
+
+.textarea:focus {
+  outline: none;
+  border-color: #007bff;
+}
+
+.textarea:disabled {
+  background-color: #f5f5f5;
+  cursor: not-allowed;
+}
+
+.textarea::placeholder {
+  color: #999;
+}
+
+.characterCount {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+  font-size: 13px;
+  color: #999;
+}
+
+.errorMessage {
+  margin: 0 24px 16px 24px;
+  padding: 12px 16px;
+  background-color: #fee;
+  border: 1px solid #fcc;
+  border-radius: 8px;
+  color: #c33;
+  font-size: 14px;
+}
+
+.successMessage {
+  margin: 0 24px 16px 24px;
+  padding: 12px 16px;
+  background-color: #efe;
+  border: 1px solid #cfc;
+  border-radius: 8px;
+  color: #383;
+  font-size: 14px;
+}
+
+.cardFooter {
+  display: flex;
+  gap: 12px;
+  padding: 20px 24px;
+  border-top: 1px solid #e0e0e0;
+}
+
+.resetButton,
+.saveButton {
+  flex: 1;
+  padding: 14px 24px;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: none;
+}
+
+.resetButton {
+  background-color: white;
+  border: 1px solid #e0e0e0;
+  color: #666;
+}
+
+.resetButton:hover:not(:disabled) {
+  background-color: #f5f5f5;
+  border-color: #dc3545;
+  color: #dc3545;
+}
+
+.resetButton:disabled {
+  background-color: #f9f9f9;
+  color: #ccc;
+  cursor: not-allowed;
+}
+
+.saveButton {
+  background-color: #007bff;
+  color: white;
+}
+
+.saveButton:hover:not(:disabled) {
+  background-color: #0056b3;
+}
+
+.saveButton:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+}
+
+.infoCard {
+  background-color: #f8f9fa;
+  border: 1px solid #e0e0e0;
+  border-radius: 12px;
+  padding: 24px;
+}
+
+.infoTitle {
+  font-size: 18px;
+  font-weight: 600;
+  color: #333;
+  margin: 0 0 16px 0;
+}
+
+.infoList {
+  margin: 0;
+  padding-left: 20px;
+  list-style-type: none;
+}
+
+.infoList li {
+  position: relative;
+  font-size: 14px;
+  color: #666;
+  line-height: 1.8;
+  padding-left: 8px;
+}
+
+.infoList li::before {
+  content: '•';
+  position: absolute;
+  left: -12px;
+  color: #007bff;
+  font-weight: bold;
+}
+
+/* 반응형 - 768px 이하 */
+@media (max-width: 768px) {
+  .content {
+    padding: 24px 16px;
+  }
+
+  .title {
+    font-size: 24px;
+  }
+
+  .cardHeader,
+  .cardBody,
+  .cardFooter {
+    padding: 20px 16px;
+  }
+
+  .cardFooter {
+    flex-direction: column;
+  }
+
+  .resetButton,
+  .saveButton {
+    width: 100%;
+  }
+
+  .textarea {
+    min-height: 250px;
+    font-size: 16px; /* iOS 자동 줌 방지 */
+  }
+}
+
+/* 반응형 - 480px 이하 */
+@media (max-width: 480px) {
+  .header {
+    margin-bottom: 24px;
+  }
+
+  .title {
+    font-size: 20px;
+  }
+
+  .cardTitle {
+    font-size: 18px;
+  }
+
+  .infoCard {
+    padding: 20px 16px;
+  }
+}

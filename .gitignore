@@ -1,0 +1,56 @@
+# ───────────────────────────────────────────────────────────────
+# LikemeLikeMe monorepo — root .gitignore
+# 앱별 세부 규칙은 apps/*/.gitignore 에도 존재한다 (git 이 계층적으로 병합 적용).
+# ───────────────────────────────────────────────────────────────
+
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+*.tsbuildinfo
+
+# Env / secrets
+#   apps/api 의 .env* 는 실제 키(OPENAI_API_KEY, JWT_SECRET, TELEGRAM_BOT_TOKEN)를
+#   포함하므로 절대 커밋 금지. 예시 템플릿과 프론트의 비민감 설정만 추적 허용.
+.env
+.env.local
+.env.*.local
+apps/api/.env
+apps/api/.env.development
+apps/api/.env.production
+!**/.env.example
+!apps/web/.env.development
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# Docker 로컬 볼륨 (postgres 데이터)
+postgres_data/
+
+# Python (임베딩 시각화 스크립트)
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+
+# Claude Code 로컬 설정 (머신 전용, 공유 대상 아님)
+.claude/settings.local.json
