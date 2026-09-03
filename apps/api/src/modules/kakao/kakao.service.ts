@@ -1,7 +1,7 @@
 import { Injectable, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { KakaoTxtParser } from './parsers/kakao-txt.parser';
-import { OpenaiService } from '../openai/openai.service';
+import { EmbeddingService } from '../embedding/embedding.service';
 import {
   RelationshipCategory,
   PolitenessLevel,
@@ -15,7 +15,7 @@ export class KakaoService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly parser: KakaoTxtParser,
-    private readonly openai: OpenaiService,
+    private readonly embedding: EmbeddingService,
   ) {}
 
   /**
@@ -254,14 +254,11 @@ export class KakaoService {
       );
 
       try {
-        // 배치로 임베딩 생성
+        // 배치로 임베딩 생성 (KoSimCSE 768차원, 자체 호스팅)
         const texts = batch.map((sample) => sample.text);
-        const { embeddings, totalTokens } =
-          await this.openai.createEmbeddings(texts);
+        const embeddings = await this.embedding.embedMany(texts);
 
-        this.logger.log(
-          `Generated ${embeddings.length} embeddings, used ${totalTokens} tokens`,
-        );
+        this.logger.log(`Generated ${embeddings.length} embeddings`);
 
         // 3. DB에 저장 (병렬 처리로 성능 최적화)
         const updatePromises = batch.map(async (sample, j) => {

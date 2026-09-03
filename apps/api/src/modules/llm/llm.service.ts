@@ -1,6 +1,7 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { OpenaiService } from '../openai/openai.service';
+import { EmbeddingService } from '../embedding/embedding.service';
 import {
   GenerateReplyResponse,
   GenerateMultipleRepliesResponse,
@@ -19,6 +20,7 @@ export class LlmService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly openai: OpenaiService,
+    private readonly embedding: EmbeddingService,
   ) {}
 
   /**
@@ -91,8 +93,8 @@ export class LlmService {
       `Searching similar tone samples for user ${userId}, limit ${limit}`,
     );
 
-    // 1. 메시지 임베딩 생성
-    const { embedding } = await this.openai.createEmbedding(messageContent);
+    // 1. 메시지 임베딩 생성 (KoSimCSE 768차원, 자체 호스팅)
+    const embedding = await this.embedding.embed(messageContent);
     const vectorString = `[${embedding.join(',')}]`;
 
     // 2. pgvector 코사인 유사도 검색 (HNSW 인덱스 활용)
