@@ -26,28 +26,25 @@
 - **DB 연결 점검 완료** (로드맵 5단계 실습): 아래 "트러블슈팅 기록 #1" 참고. `chatbot_db` 컨테이너 복구,
   Prisma 마이그레이션 이력 정리(`migrate deploy` → `Database schema is up to date!`),
   `DEFAULT_USER_ID` 가 `apps/api/.env` 값과 일치함 확인.
+- **모노레포 초기 정리 PR #1 병합**: `refactor/monorepo-init` → `main` (`821d548`). env 구조,
+  DB 점검, tsconfig `baseUrl` 제거, 로그 문서.
+- **임베딩 모델 교체 완료** (브리핑 8-3): OpenAI `text-embedding-3-small`(1536) →
+  자체 호스팅 `BM-K/KoSimCSE-roberta-multitask`(768). 아래 "임베딩 모델 교체" 섹션 참고.
+  `tone_samples` 17,943행 재임베딩 + 질의 경로 교체 + before/after 검증까지. 브랜치 `feat/embedding-kosimcse`.
 
-**작업 중 브랜치**: `refactor/monorepo-init` — 로컬 커밋 2개(`4583f1f` docs 로그, `2ad69d1` `.env.example` 최신화).
-아직 push·PR 안 됨.
+**작업 중 브랜치**: `feat/embedding-kosimcse` — 임베딩 교체 5커밋. push 됨, PR 미생성.
 
 **다음 할 일 (우선순위 순)**
-1. `refactor/monorepo-init` push → PR → `main` 병합 (커밋 2개: docs 로그 + `.env.example`)
-2. **임베딩 모델 교체** (브리핑 8-3, 타임박스 사용자가 3~4일로 확장):
-   OpenAI `text-embedding-3-small`(1536) → `BM-K/KoSimCSE-roberta-multitask`(768).
-   `tone_samples` **17,943행 전부** 재임베딩 (현재 전 행에 OpenAI 벡터가 채워져 있음 — 폐기 대상).
-   질의 시점 임베딩([llm.service.ts](../apps/api/src/modules/llm/llm.service.ts) `getSimilarContext`,
-   [kakao.service.ts](../apps/api/src/modules/kakao/kakao.service.ts))도 같은 모델로 교체해야 벡터 공간 일치.
-   GPT 프롬프트 연결까지만. 완벽 안 해도 됨 — "한계 + 향후 개선 방향"으로 기록.
-   **선행 필요**: `tone_samples.embedding` NULL 처리 → 컬럼 `vector(1536)` → `vector(768)` 마이그레이션
-   + HNSW 인덱스(`idx_tone_samples_embedding`) 재생성. `knowledge_chunks`·`message_embeddings` 는 0행이라 무손실.
-3. `refactor/env-config`: `apps/api` Joi 검증 스키마 추가(의존성에 `joi` 이미 있음),
+1. `feat/embedding-kosimcse` PR → `main` 병합
+2. `refactor/env-config`: `apps/api` Joi 검증 스키마 추가(의존성에 `joi` 이미 있음),
    `JWT_SECRET` 등 필수 env 부팅 시 검증 + `|| 'default-secret'` 폴백 제거, `.env.development` 삭제 반영,
-   `apps/web/.env.example` 신설
-4. Dockerfile(백엔드) → `v1-dockerized`
-5. 루트 `docker-compose.yml`(백엔드 + DB) → `v2-compose`.
+   `apps/web/.env.example` 신설. `prisma.config.ts` 이전(에디터 env 오탐 + deprecated 경고 동시 해소).
+3. Dockerfile(백엔드) → `v1-dockerized`
+4. 루트 `docker-compose.yml`(백엔드 + DB + **embedding**) → `v2-compose`.
    **주의**: 기존 데이터 볼륨은 `likeme-like-me-api_postgres_data` (아래 트러블슈팅 #1). 새 compose 에서
    `external:` 로 물리거나 `pg_dump`/restore 로 이관. 새 위치에서 그냥 `docker compose up` 하면 빈 볼륨 생성됨.
-6. AWS 배포(EC2 또는 ECR) → `v3-aws`
+   `apps/embedding` 서비스도 편입, api 의 `EMBEDDING_URL` 을 서비스명으로.
+5. AWS 배포(EC2 또는 ECR) → `v3-aws`
 
 **미결 / 나중에**
 - `npm audit`: `apps/api` 에 취약점 51개(critical 2) — 8개월 된 의존성 트리의 transitive. 로컬 개발 단계라 급하지 않음.
@@ -164,6 +161,60 @@
 **로드맵 8단계(루트 compose)로 넘길 것**
 - 폴더 이동으로 compose 프로젝트명이 바뀌어 기존 볼륨과 어긋나는 문제. 새 루트 `docker-compose.yml` 에서
   `likeme-like-me-api_postgres_data` 를 `external: true` 볼륨으로 선언하거나, `pg_dump` → 새 볼륨 restore.
+
+---
+
+## 임베딩 모델 교체 (2026-09-03, 브랜치 `feat/embedding-kosimcse`)
+
+### As-Is
+- 말투 검색 RAG 는 `tone_samples` 만 사용 (`message_embeddings`·`knowledge_chunks` 는 스키마만 있고 0행).
+- 임베딩: OpenAI `text-embedding-3-small`(1536). `tone_samples` 17,943행 전부 이 벡터로 채워져 있었음.
+- 아키텍처: 브리핑엔 "FAISS" 라 돼 있으나 실제는 **pgvector + HNSW**(cosine). FAISS 흔적 없음.
+- 검색: [llm.service.ts](../apps/api/src/modules/llm/llm.service.ts) `getSimilarContext` 가 수신 메시지를
+  OpenAI 로 임베딩 → `tone_samples` 코사인 top-15. category/politeness/vibe 라벨은 검색에서 미사용
+  (프롬프트 텍스트로만 GPT 에 전달).
+
+### 문제 인식
+- OpenAI 범용 다국어 임베딩은 "무슨 주제인가"(어휘·표면) 위주로 반응. 이 프로젝트가 필요한 건
+  "같은 상황·같은 결의 내 과거 발화" — 한국어 문장 의미/어조 유사도.
+- 임베딩마다 외부 API 호출·비용·네트워크 의존.
+
+### To-Be
+- **`apps/embedding`** (모노레포 첫 non-Node 앱): FastAPI + transformers + torch(CPU).
+  `BM-K/KoSimCSE-roberta-multitask`(768), CLS 풀링 + L2 정규화. `POST /embed`, `GET /health`.
+  Dockerfile 에 모델을 구워 기동 즉시화·오프라인.
+- **차원 마이그레이션** `20260903120000_embedding_dim_768`: 3개 임베딩 컬럼 `vector(1536)` → `vector(768)`,
+  HNSW 인덱스 재생성. `tone_samples` 기존 OpenAI 벡터는 NULL 처리(폐기).
+  `migrate dev` 는 기존 이력이 shadow DB 재생 불가라 raw SQL + `migrate resolve` 로 적용
+  (트러블슈팅 #1 의 패턴 재사용).
+- **재임베딩** `scripts/reembed-tone-samples.ts`: 17,943행 배치 처리, 중단 후 재실행 가능.
+  첫 실행이 13,800행에서 컨테이너 OOM(`Exited 137`) → 서비스에 `torch.inference_mode()` +
+  주기적 `gc.collect()` + 내부 배치 축소 + 메모리 상한 3g. 재실행으로 전량 완료(약 77초).
+- **질의 경로 교체**: `src/modules/embedding/EmbeddingService`(HTTP 클라이언트, 재시도 백오프) 신설 →
+  `getSimilarContext`, `kakao.service` 가 이걸 사용. `openai.service` 의 임베딩 메서드는 `@deprecated`
+  (분석 스크립트 호환용 잔존). `.env` 에 `EMBEDDING_URL`.
+
+### 검증 — before/after 검색 비교 (동일 쿼리, top-3)
+
+기존 OpenAI 벡터를 백업에서 임시 테이블로 복원해 같은 쿼리로 비교.
+
+| 쿼리 | KoSimCSE 768 (신규) | OpenAI 1536 (기존) |
+|---|---|---|
+| "내일 시간 되면 잠깐 볼 수 있을까?" | `아 근데 혹시 내일 맞나요?`(.78) / `내일 한 번 더 들어오나요?`(.78) / `그것도 내일 해도 되려나`(.76) — 전부 "내일 약속" 맥락 | `잠깐잠깐 바꿀 수 있느냐고`(.60) / `낮에 대부도 잠깐 갔다올까`(.59) / `잠?`(.57) — "잠깐" 토큰 매칭에 치우침 |
+| "자료 언제까지 보내주시면 될까요?" | `언제까지 보내야 되죠?`(.82) / `언제까지 해야 할까요`(.67) — 마감 문의 의도 | `언제까지 보내야 되죠?`(.71) / `자료 뭐 봐요`(.56) / `자료조사 개늦게 해버렸어요`(.49) — "자료" 토큰 |
+| "아 그거 진짜 짜증나네" | `그냥 ㅈㄴ 짜증나는데`(.89) / `근데 짜증나잖`(.88) / `그냥 ㅈㄴ 밉다`(.73) — 부정 감정으로 일반화 | `그냥 ㅈㄴ 짜증나는데`(.68) / `이걸 진짜?`(.55) / `와 진짜 개강인가`(.54) — "진짜" 토큰 |
+
+→ KoSimCSE 가 **의도·감정 기준**으로, OpenAI 는 **표면 어휘 기준**으로 검색됨. 절대 유사도도 더 높고 분리가 뚜렷.
+전체 체인 1회 확인: 수신 `"내일 시간 되면 잠깐 볼 수 있을까?"` → GPT 답변 `"아, 내일이면 시간 괜찮을 것 같은데요? 몇 시에 만날까요?"` (짧고 자연스러운 반말/존댓말 톤).
+
+### 인지된 한계 (향후 개선)
+- 카톡 초단문("굳","넵")은 어느 모델이든 벡터 노이즈. 데이터 특성상 불가피.
+- 검색이 category/politeness/vibe 라벨을 무시 → 상사에게 답하는데 캐주얼 예시가 뽑힐 수 있음.
+  개선안: politeness 버킷 안에서 top-K, 부족하면 전역 폴백 (인덱스는 이미 존재).
+- 데이터가 CASUAL(13,579) 로 크게 편향, category 10개 중 7개만 사용(교수·집안 어르신은 자동응답
+  대상에서 사용자가 의도적으로 제외).
+- KoSimCSE 는 2021 RoBERTa-base — 넓은 일반 retrieval 은 최신 대형 모델보다 약할 수 있음.
+- 이미지 2.45GB(torch CPU). 필요 시 multi-stage 슬림화.
 
 ---
 
