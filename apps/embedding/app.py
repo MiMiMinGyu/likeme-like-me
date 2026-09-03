@@ -6,6 +6,7 @@
 - api 서버(NestJS)의 재임베딩 스크립트 / 질의 시점 임베딩이 이 서비스를 호출한다.
 """
 
+import gc
 import os
 from contextlib import asynccontextmanager
 
@@ -16,10 +17,13 @@ from pydantic import BaseModel, Field
 from transformers import AutoModel, AutoTokenizer
 
 MODEL_ID = os.getenv("MODEL_ID", "BM-K/KoSimCSE-roberta-multitask")
-MAX_BATCH = int(os.getenv("MAX_BATCH", "256"))      # 요청 1건 내부에서 나눠 처리할 배치 크기
+MAX_BATCH = int(os.getenv("MAX_BATCH", "64"))       # 요청 1건 내부에서 나눠 처리할 배치 크기
 MAX_LENGTH = int(os.getenv("MAX_LENGTH", "128"))    # 카톡 초단문 위주라 128 이면 충분
+GC_EVERY = int(os.getenv("GC_EVERY", "50"))         # N개 요청마다 gc.collect() (CPU 메모리 누적 방지)
 
-_state: dict = {}
+torch.set_num_threads(int(os.getenv("TORCH_THREADS", str(max(1, (os.cpu_count() or 2) // 2)))))
+
+_state: dict = {"calls": 0}
 
 
 @asynccontextmanager
@@ -61,20 +65,26 @@ def _embed(texts: list[str]) -> list[list[float]]:
     tokenizer = _state["tokenizer"]
     model = _state["model"]
     out: list[list[float]] = []
-    for i in range(0, len(texts), MAX_BATCH):
-        # 빈 문자열은 토크나이저가 싫어하므로 공백 한 칸으로 치환
-        batch = [t if t and t.strip() else " " for t in texts[i : i + MAX_BATCH]]
-        enc = tokenizer(
-            batch,
-            padding=True,
-            truncation=True,
-            max_length=MAX_LENGTH,
-            return_tensors="pt",
-        )
-        hidden = model(**enc).last_hidden_state   # [B, T, H]
-        cls = hidden[:, 0]                        # CLS 풀링 → [B, H]
-        cls = F.normalize(cls, p=2, dim=1)        # 단위 벡터로 정규화
-        out.extend(cls.tolist())
+    with torch.inference_mode():
+        for i in range(0, len(texts), MAX_BATCH):
+            # 빈 문자열은 토크나이저가 싫어하므로 공백 한 칸으로 치환
+            batch = [t if t and t.strip() else " " for t in texts[i : i + MAX_BATCH]]
+            enc = tokenizer(
+                batch,
+                padding=True,
+                truncation=True,
+                max_length=MAX_LENGTH,
+                return_tensors="pt",
+            )
+            hidden = model(**enc).last_hidden_state   # [B, T, H]
+            cls = hidden[:, 0]                        # CLS 풀링 → [B, H]
+            cls = F.normalize(cls, p=2, dim=1)        # 단위 벡터로 정규화
+            out.extend(cls.tolist())
+            del enc, hidden, cls
+
+    _state["calls"] += 1
+    if _state["calls"] % GC_EVERY == 0:
+        gc.collect()
     return out
 
 
