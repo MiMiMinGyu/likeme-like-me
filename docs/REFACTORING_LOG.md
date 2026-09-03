@@ -49,8 +49,10 @@
 **미결 / 나중에**
 - `npm audit`: `apps/api` 에 취약점 51개(critical 2) — 8개월 된 의존성 트리의 transitive. 로컬 개발 단계라 급하지 않음.
   `npm audit fix --force` 금지(고정 버전 깨짐). 별도 `chore(deps)` 로 개별 처리.
-- npm 11 의 install-script 차단: `bcrypt` 네이티브 빌드가 안 됨 → 앱 부팅 전
-  `npm approve-scripts bcrypt @swc/core @prisma/client @prisma/engines prisma` + `npm rebuild bcrypt` 필요.
+- npm 11 의 install-script 차단: `bcrypt` 네이티브 빌드, `@prisma/client` 의 `prisma generate` postinstall 이 안 됨.
+  → `npx prisma generate` 는 수동 실행해 둠(클라이언트에 enum 누락으로 `tsc` 실패하던 것 해소).
+  앱 부팅 전 `npm approve-scripts bcrypt @swc/core @prisma/client @prisma/engines prisma` + `npm rebuild bcrypt` 필요.
+  `npm ci` 로 새로 설치하면 다시 재현되므로 3번(env-config)에서 `postinstall` 스크립트 정리와 함께 처리.
 - `package.json#prisma` 설정 deprecated (Prisma 7 에서 제거) → `prisma.config.ts` 이전은 3번 또는 별도 chore.
 - Prisma 를 `8.0.0-rc` 로 올리라는 알림이 뜨지만 무시 (npm `latest` 태그가 현재 RC 를 가리킴). `^6.18.0` 유지.
 
