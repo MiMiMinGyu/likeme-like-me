@@ -6,7 +6,7 @@
 
 ---
 
-## 현재 진행 상황 (2026-09-03 기준)
+## 현재 진행 상황 (2026-09-06 기준)
 
 **완료**
 - 모노레포 통합: 팀에서 분리 운영하던 FE/BE 두 저장소(`Capstone2_FE`, `Capstone2_BE`)의
@@ -28,17 +28,33 @@
   `DEFAULT_USER_ID` 가 `apps/api/.env` 값과 일치함 확인.
 - **모노레포 초기 정리 PR #1 병합**: `refactor/monorepo-init` → `main` (`821d548`). env 구조,
   DB 점검, tsconfig `baseUrl` 제거, 로그 문서.
-- **임베딩 모델 교체 완료** (브리핑 8-3): OpenAI `text-embedding-3-small`(1536) →
+- **임베딩 모델 교체 완료** (브리핑 8-3, PR #2 병합 `c098e38`): OpenAI `text-embedding-3-small`(1536) →
   자체 호스팅 `BM-K/KoSimCSE-roberta-multitask`(768). 아래 "임베딩 모델 교체" 섹션 참고.
-  `tone_samples` 17,943행 재임베딩 + 질의 경로 교체 + before/after 검증까지. 브랜치 `feat/embedding-kosimcse`.
+  `tone_samples` 17,943행 재임베딩 + 질의 경로 교체 + before/after 검증(격리 레벨)까지.
 
-**작업 중 브랜치**: `feat/embedding-kosimcse` — 임베딩 교체 5커밋. push 됨, PR 미생성.
+**작업 중 브랜치**: 없음. `main` = `c098e38`. `feat/embedding-kosimcse` 병합·삭제됨.
+기능 테스트 세션(2026-09-05~06)에서 나온 수정분은 아직 미커밋 상태 — 아래 "기능 테스트" 섹션 참고.
+
+- **기능 테스트 완료** (2026-09-05~06): ⓐ 앱 부팅 ⓑ auth(JWT, bcrypt) ⓒ 텔레그램 봇 연동
+  (실제 텔레그램 데스크탑 앱에서 메시지 송수신 ↔ 로컬 웹 UI가 SSE로 동일 대화를 실시간 반영하는
+  화면을 나란히 캡처해 확인) ⓓ `generateReply` end-to-end(KoSimCSE 검색 + GPT) ⓔ `apps/web`
+  (React/Vite) 기동까지 전부 확인. 과정에서 UI 버그 1건 + RAG/프롬프트 톤 일관성 버그(5개 원인
+  레이어) + dev 서버 orphan 프로세스 반복 이슈를 발견·수정. 상세는 "## 기능 테스트 트러블슈팅" 섹션.
+
+### 다음 세션 시작점 (2026-09-06~)
+
+**기능 테스트 로드맵 1번 항목(ⓐ~ⓔ) 전부 완료.** 이번 세션에서 고친 `llm.service.ts` 변경분
+(politeness 필터, 프롬프트 수정)과 `ChatPage.jsx`(자동 스크롤) 변경분은 아직 미커밋 — 다음 세션
+시작 시 `git status`로 diff 확인 후 커밋부터 정리.
+
+**컨테이너**: `chatbot_db`, `likeme-embedding` 둘 다 필요. 재부팅했으면 `docker start chatbot_db likeme-embedding`.
 
 **다음 할 일 (우선순위 순)**
-1. `feat/embedding-kosimcse` PR → `main` 병합
+1. 이번 세션 변경분 커밋 (`llm.service.ts`, `ChatPage.jsx`) — 커밋 전 diff 재검토.
 2. `refactor/env-config`: `apps/api` Joi 검증 스키마 추가(의존성에 `joi` 이미 있음),
    `JWT_SECRET` 등 필수 env 부팅 시 검증 + `|| 'default-secret'` 폴백 제거, `.env.development` 삭제 반영,
    `apps/web/.env.example` 신설. `prisma.config.ts` 이전(에디터 env 오탐 + deprecated 경고 동시 해소).
+   `npm ci` 후 자동 빌드되도록 `postinstall` 정리.
 3. Dockerfile(백엔드) → `v1-dockerized`
 4. 루트 `docker-compose.yml`(백엔드 + DB + **embedding**) → `v2-compose`.
    **주의**: 기존 데이터 볼륨은 `likeme-like-me-api_postgres_data` (아래 트러블슈팅 #1). 새 compose 에서
@@ -209,12 +225,95 @@
 
 ### 인지된 한계 (향후 개선)
 - 카톡 초단문("굳","넵")은 어느 모델이든 벡터 노이즈. 데이터 특성상 불가피.
-- 검색이 category/politeness/vibe 라벨을 무시 → 상사에게 답하는데 캐주얼 예시가 뽑힐 수 있음.
-  개선안: politeness 버킷 안에서 top-K, 부족하면 전역 폴백 (인덱스는 이미 존재).
+- ~~검색이 category/politeness/vibe 라벨을 무시 → 상사에게 답하는데 캐주얼 예시가 뽑힐 수 있음.~~
+  **해결 (2026-09-06)**: politeness 버킷 안에서 top-K, 부족하면 전역 폴백으로 구현 완료.
+  "## 기능 테스트 트러블슈팅" → "#2. 톤 일관성 버그" 참고.
 - 데이터가 CASUAL(13,579) 로 크게 편향, category 10개 중 7개만 사용(교수·집안 어르신은 자동응답
   대상에서 사용자가 의도적으로 제외).
 - KoSimCSE 는 2021 RoBERTa-base — 넓은 일반 retrieval 은 최신 대형 모델보다 약할 수 있음.
 - 이미지 2.45GB(torch CPU). 필요 시 multi-stage 슬림화.
+
+---
+
+## 기능 테스트 트러블슈팅 (2026-09-05~06)
+
+> 브리핑 8-3(임베딩 교체) 이후 처음으로 앱 전체를 띄워 실제 흐름(웹 UI → API → GPT)을 돌려본 세션.
+> 앱은 첫 시도에 별다른 수정 없이 부팅에 성공했지만, 실제 대화 흐름을 테스트하는 과정에서
+> UI 버그 1건과 다층적인 톤 일관성 버그, 그리고 개발 환경 자체의 반복적인 문제를 발견했다.
+
+### #1. AI 추천 답변 박스가 채팅창을 가리는 UI 버그
+
+**As-Is / 증상**: `.messagesContainer`는 `flex:1; overflow-y:auto`라 AI 추천 답변 박스가 나타나면
+채팅창 높이 자체는 정상적으로 줄어드는데(레이어가 겹치는 게 아님), 스크롤 위치를 맞춰주는 로직이
+없어서 방금 온 메시지가 시야 아래로 밀려 사용자가 매번 수동 스크롤을 해야 했다.
+
+**To-Be**: `.messagesContainer`에 `ref`를 연결하고 `messages`/`recommendations`/`recommendationLoading`이
+바뀔 때마다 `scrollTop = scrollHeight`로 바닥까지 자동 스크롤하는 `useEffect` 추가.
+([ChatPage.jsx](../apps/web/src/pages/chat/ChatPage.jsx))
+
+### #2. 톤 일관성 버그 — "겉보기엔 하나, 실제론 다섯 겹" 원인
+
+**증상**: 존댓말 관계(민수, `politeness=POLITE`)에게 보낼 AI 추천 답변 중 **부정(거절) 답변만** 반말이
+섞이거나("오늘은 힘들어 형님 다음에 하자"), 시제가 어긋나는(월요일 약속 얘기 중인데 "오늘은 바빠서"라고
+답하는) 문제가 반복됨. 원인을 하나씩 벗겨내는 과정 자체가 이 세션의 핵심 트러블슈팅이었다.
+
+**원인 레이어 (발견 순서대로)**
+
+| # | 레이어 | 실제 원인 | 조치 |
+|---|---|---|---|
+| 1 | RAG 검색 | `getSimilarContext`가 politeness/category 라벨을 무시하고 전체 톤샘플에서 순수 텍스트 유사도로만 top-15 검색 → 존댓말 상대인데 다른 반말 상대(동생·친구)의 예시가 대거 섞여 들어옴 | politeness 버킷 우선 검색 + 부족분 전역 폴백 (`getSimilarContext(... , politeness)`) |
+| 2 | Prisma 쿼리 버그 | 폴백 쿼리의 `id NOT IN (...)` 에서 `uuid <> text` 캐스팅 에러 (`42883`) | `id::text NOT IN (...)`로 캐스팅 |
+| 3 | 프롬프트 지시 부재 | "관계에 맞는 격식 수준 유지"라는 추상적 지시만 있어 LLM이 예시 텍스트의 반말 어미에 끌려감 | `politenessInstruction()` 추가 — "반드시 존댓말/반말로 답변할 것" 명령형 지시 |
+| 4 | LLM 관용구 편향처럼 보였던 것 | "다음에 하자" 류 거절+재약속 관용구가 반말로 워낙 강하게 학습돼 추상적 금지를 이김 (것처럼 보임) | `declineExample()` — politeness별 전체 문장 예시를 지시 바로 옆에 배치 |
+| 5 | **진짜 원인 (반전)** | 계정에 저장된 `custom_guidelines`(말투 커스텀 규칙) 5번이 `'다음에 하자'/'오늘은 힘들어'`를 관계 존댓말과 무관하게 하드코딩된 대안 문구로 명시 — `customGuidelines`가 있으면 `defaultConstraints` 전체가 무시되므로, 1~4번 수정이 전혀 안 먹히고 있었음 | 저장된 `custom_guidelines` 텍스트 자체를 존댓말/반말 상대를 구분하는 조건부 문구로 수정 (DB 직접 업데이트) |
+| 6 | 자기모순 예시 | 5번을 고친 뒤에도 "오늘"이 계속 나옴 → `declineExample()`에 내가 넣은 예시 문구 자체가 `"오늘은 조금 힘들어요, 다음에 해요"`였고, "형식만 참고하라"고 적어도 LLM이 내용까지 거의 그대로 베낌. 동시에 다른 곳엔 "오늘 쓰지 말라"는 지시를 넣어 자기모순이었음 | 예시에서 시간 표현 제거 (`"그건 조금 어려울 것 같아요, 다음에 해요"`) |
+
+**교훈**: 4번(LLM 관용구 편향)은 그럴듯한 가설이었지만 틀렸다 — 실제로는 코드가 아니라 **DB에 저장된
+설정 데이터**가 원인이었다. `customGuidelines ? A : B` 같은 이분기 구조에서는, 코드를 아무리 고쳐도
+분기 A(사용자 데이터)가 쓰이는 한 분기 B(내가 고친 기본값)의 수정은 눈에 보이는 효과가 없다 —
+디버그 로그로 **실제로 LLM에 전송되는 완전한 프롬프트**를 까보고 나서야 발견함.
+
+**검증 — 같은 쿼리("월요일 밥 약속" 흐름 중 "중국음식 배달시켜 먹을까?") 반복 테스트**
+
+| 구분 | 수정 전 | 레이어 1~4 수정 후 | 레이어 5~6 수정 후 (최종) |
+|---|---|---|---|
+| 긍정 답변 | 존댓말 (우연히 일치) | 존댓말, 일관됨 | 존댓말, 일관됨 |
+| 부정 답변 어체 | 반말 혼입 ("형님 다음에 하자") | 존댓말이지만 매번 거의 동일한 문장 | 존댓말, 시제 정합 |
+| 시제 | "오늘은 바빠서" (미래 약속인데 현재형) | "오늘은 조금 힘들어요" (동일 문제 잔존) | "그건 조금 어려울 것 같아요" (시점 언급 제거) |
+| 근본 원인 | (미상) | RAG 편향 + 프롬프트 지시 부재로 오판 | 실제로는 계정 `custom_guidelines` 데이터 |
+
+**politeness 버킷 검색 효과 (DB 직접 재현, `tone_samples` 전수 재쿼리)**
+
+| 쿼리 | 필터 없음 (top-15) | politeness=POLITE 필터 적용 |
+|---|---|---|
+| "응 개강했지 돌아오는 월요일에 같이 밥 먹을까?" | POLITE 3 / CASUAL 12 | POLITE 15 (폴백 불필요) |
+| "중국음식 배달시켜 먹을까?" | POLITE 다수지만 라벨 무시 상태로 검색 | POLITE 13 + 전역 폴백 2 |
+
+사용자(민수 관계, `politeness=POLITE`) 톤샘플 전체 분포: `POLITE 4,112개 / CASUAL 13,579개 / FORMAL 252개`
+— POLITE 데이터 자체는 충분해서, 필터링 안 하는 것 자체가 손해였음을 보여주는 근거.
+
+### #3. dev 서버 `--watch` 재시작 시 반복되는 EADDRINUSE (orphan 프로세스)
+
+**증상**: 코드 저장 → `nest --watch`가 재컴파일·재시작 → `Nest application successfully started` 직후
+`Error: listen EADDRINUSE :::3000`. 터미널에서 `Ctrl+C` 후 재기동해도 동일 에러 반복 (세션 중 3회 발생).
+
+**원인**: Windows에서 `@nestjs/cli --watch`가 이전 워커 프로세스를 완전히 죽이기 전에 새 워커를 띄우는
+레이스 컨디션. 죽지 않은 이전 `node.exe`가 포트를 계속 점유 → 새 프로세스는 애플리케이션 초기화까지는
+성공하지만 실제 HTTP 바인딩에서 실패. 게다가 이 orphan은 터미널의 `Ctrl+C`(SIGINT)를 받지 못해
+사용자가 재기동해도 안 죽음.
+
+**조치**: 매번 `netstat -ano | findstr :3000` 으로 실제 포트 점유 PID 확인 → `taskkill /PID <pid> /F` 로
+강제 종료 후 재기동. 근본 해결책(예: `npx kill-port 3000 && npm run start:dev`를 `predev` 스크립트로 등록)은
+아직 미적용 — 재발 시 다시 수동 처리 필요.
+
+### #4. 텔레그램 연동 end-to-end 확인
+
+로컬 웹 UI(`localhost:5173`)와 텔레그램 데스크탑 앱(Telegram Web, `@LikeMe_bot`)을 나란히 띄워
+동일 대화가 양쪽에 실시간으로 동일하게 반영되는 것을 화면 캡처로 확인. 텔레그램 앱에서 보낸
+메시지가 webhook → SSE로 웹 UI에 즉시 뜨고, 웹 UI에서 만든 이전 대화 기록(예: "좋아요 형님 같이
+밥 먹어요 월요일에 뭐 먹을까요?")도 텔레그램 쪽 대화창에 동일하게 남아 있어, 수신·AI 추천·
+**실제 전송**(`TelegramService.sendSelectedReply` → `bot.telegram.sendMessage`)까지 전체 루프가
+실제 텔레그램 계정으로 왕복 확인됨. 포트폴리오용으로 남겨둘 만한 스크린샷.
 
 ---
 
