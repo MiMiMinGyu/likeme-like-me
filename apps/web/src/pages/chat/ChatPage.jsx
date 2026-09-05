@@ -34,6 +34,15 @@ const ChatPage = () => {
     relationshipRef.current = relationship;
   }, [relationship]);
 
+  // 메시지/AI 추천 답변이 바뀌어 채팅창 높이가 변할 때마다 바닥으로 스크롤
+  const messagesContainerRef = useRef(null);
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (container) {
+      container.scrollTop = container.scrollHeight;
+    }
+  }, [messages, recommendations, recommendationLoading]);
+
   // 대화 목록 가져오기
   const fetchConversations = useCallback(async () => {
     try {
@@ -379,7 +388,7 @@ const ChatPage = () => {
             </button>
           </div>
 
-          <div className={styles.messagesContainer}>
+          <div className={styles.messagesContainer} ref={messagesContainerRef}>
             {messages.length === 0 ? (
               <div className={styles.emptyMessages}>
                 <p>메시지가 없습니다</p>
