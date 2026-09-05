@@ -1,4 +1,5 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { OpenaiService } from '../openai/openai.service';
 import { EmbeddingService } from '../embedding/embedding.service';
@@ -83,38 +84,79 @@ export class LlmService {
    * @param userId 사용자 ID
    * @param messageContent 검색할 메시지 내용
    * @param limit 조회할 개수 (기본 5개)
+   * @param politeness 대화 상대와의 존댓말 수준(FORMAL/POLITE/CASUAL). 있으면 같은
+   *   수준의 톤샘플을 우선 검색하고, 부족한 만큼만 전역에서 폴백한다.
    */
   async getSimilarContext(
     userId: string,
     messageContent: string,
     limit = 5,
+    politeness?: string,
   ): Promise<SimilarContext> {
     this.logger.log(
-      `Searching similar tone samples for user ${userId}, limit ${limit}`,
+      `Searching similar tone samples for user ${userId}, limit ${limit}, politeness ${politeness ?? '(any)'}`,
     );
 
     // 1. 메시지 임베딩 생성 (KoSimCSE 768차원, 자체 호스팅)
     const embedding = await this.embedding.embed(messageContent);
     const vectorString = `[${embedding.join(',')}]`;
 
-    // 2. pgvector 코사인 유사도 검색 (HNSW 인덱스 활용)
-    const similarSamples = await this.prisma.$queryRaw<
-      Array<{ text: string; similarity: number }>
-    >`
-      SELECT
-        text,
-        1 - (embedding <=> ${vectorString}::vector) as similarity
-      FROM tone_samples
-      WHERE user_id = ${userId}::uuid
-        AND embedding IS NOT NULL
-      ORDER BY embedding <=> ${vectorString}::vector
-      LIMIT ${limit}
-    `;
+    type SampleRow = { id: string; text: string; similarity: number };
 
-    this.logger.log(`Found ${similarSamples.length} similar examples`);
+    // 2. pgvector 코사인 유사도 검색 (HNSW 인덱스 활용)
+    //    politeness가 있으면 같은 존댓말 수준 안에서 먼저 찾는다. 이렇게 하지 않으면
+    //    "월요일 밥약속" 같은 주제 유사도만으로 검색되어, 이 상대와 무관한 다른
+    //    반말 상대의 예시가 섞여 답변 톤이 흔들린다.
+    let samples: SampleRow[];
+    if (politeness) {
+      samples = await this.prisma.$queryRaw<SampleRow[]>(Prisma.sql`
+        SELECT id, text, 1 - (embedding <=> ${vectorString}::vector) as similarity
+        FROM tone_samples
+        WHERE user_id = ${userId}::uuid
+          AND embedding IS NOT NULL
+          AND politeness = ${politeness}::"PolitenessLevel"
+        ORDER BY embedding <=> ${vectorString}::vector
+        LIMIT ${limit}
+      `);
+
+      if (samples.length < limit) {
+        const remaining = limit - samples.length;
+        const excludeIds = samples.map((s) => s.id);
+        const exclude =
+          excludeIds.length > 0
+            ? Prisma.sql`AND id::text NOT IN (${Prisma.join(excludeIds)})`
+            : Prisma.empty;
+
+        const fallback = await this.prisma.$queryRaw<SampleRow[]>(Prisma.sql`
+          SELECT id, text, 1 - (embedding <=> ${vectorString}::vector) as similarity
+          FROM tone_samples
+          WHERE user_id = ${userId}::uuid
+            AND embedding IS NOT NULL
+            ${exclude}
+          ORDER BY embedding <=> ${vectorString}::vector
+          LIMIT ${remaining}
+        `);
+
+        this.logger.log(
+          `politeness=${politeness} 버킷에서 ${samples.length}/${limit}개만 발견, 전역 폴백으로 ${fallback.length}개 보충`,
+        );
+        samples = [...samples, ...fallback];
+      }
+    } else {
+      samples = await this.prisma.$queryRaw<SampleRow[]>(Prisma.sql`
+        SELECT id, text, 1 - (embedding <=> ${vectorString}::vector) as similarity
+        FROM tone_samples
+        WHERE user_id = ${userId}::uuid
+          AND embedding IS NOT NULL
+        ORDER BY embedding <=> ${vectorString}::vector
+        LIMIT ${limit}
+      `);
+    }
+
+    this.logger.log(`Found ${samples.length} similar examples`);
 
     return {
-      examples: similarSamples,
+      examples: samples.map(({ text, similarity }) => ({ text, similarity })),
     };
   }
 
@@ -216,10 +258,46 @@ export class LlmService {
       name: partner.name,
       // 관계 정보가 없으면 격식 있는 존댓말 카테고리 (ACQUAINTANCE_CASUAL) 사용
       category: relationship?.category || 'ACQUAINTANCE_CASUAL',
+      politeness: relationship?.politeness || 'POLITE',
+      vibe: relationship?.vibe || 'CALM',
       relationshipDescription: relationship
         ? `${relationship.politeness || 'CASUAL'}, ${relationship.vibe || 'CALM'}`
         : '격식 있는 존댓말', // 관계 정보 없을 때 기본 설명
     };
+  }
+
+  /**
+   * politeness 값을 종결어미 지시문으로 변환.
+   * 예시 텍스트에 반말이 섞여 있어도 이 지시가 우선하도록 명령형으로 작성.
+   */
+  private politenessInstruction(politeness?: string): string {
+    switch (politeness) {
+      case 'FORMAL':
+        return '반드시 격식 있는 존댓말(-습니다체)로 답변할 것';
+      case 'CASUAL':
+        return '반드시 반말로 답변할 것';
+      case 'POLITE':
+      default:
+        return '반드시 존댓말(-요체)로 답변할 것. 반말 종결어미(-야, -자, -어) 사용 금지';
+    }
+  }
+
+  /**
+   * "다음에 ~하자" 류 거절+재약속 표현의 전체 문장 예시를 politeness에 맞게 제공.
+   * 이 관용구는 반말 형태(-자)가 워낙 흔해서, 어미만 예시로 주면 LLM이 앞 절은
+   * 반말로 두고 끝만 존댓말로 바꾸는 경우가 있어(예: "오늘은 힘들어 다음에 해요"),
+   * 문장 전체를 예시로 고정해 앞뒤 어체가 일치하도록 한다.
+   */
+  private declineExample(politeness?: string): string {
+    switch (politeness) {
+      case 'FORMAL':
+        return '그건 조금 어려울 것 같습니다, 다음에 하겠습니다';
+      case 'CASUAL':
+        return '그건 조금 어려울 것 같아, 다음에 하자';
+      case 'POLITE':
+      default:
+        return '그건 조금 어려울 것 같아요, 다음에 해요';
+    }
   }
 
   /**
@@ -253,9 +331,9 @@ export class LlmService {
     // 개인차가 큰 항목은 제외하고, 최소한의 일반적인 가이드만 제공
     const defaultConstraints = `
 [답변 제약 조건]
-- 제공된 말투 예시를 참고하여 자연스럽게 답변
+- ${this.politenessInstruction(receiverInfo.politeness)}
+- 제공된 말투 예시는 문장 리듬·감탄사·어휘 참고용이며, 예시의 종결어미가 위 존댓말/반말 지시와 다르면 지시를 따를 것
 - 대화 상대와의 관계(${receiverInfo.category})에 맞는 격식 수준 유지
-- 관계 정보가 없는 대상(ACQUAINTANCE_CASUAL)에게는 격식 있는 존댓말 사용
 - 최근 대화 맥락을 고려하여 일관성 있는 톤 유지
 `;
 
@@ -270,6 +348,8 @@ export class LlmService {
 ${constraints}
 
 ⚠️ 위 규칙은 절대적이며, 어떤 경우에도 위반해서는 안 됨. 특히 문장부호 사용 금지 규칙이 있다면 반드시 지켜야 함.
+
+⚠️ [최근 대화 맥락]에 언급된 시점(요일·날짜 등)과 답변의 시제가 어긋나지 않게 할 것. 예를 들어 특정 요일(예: 월요일)에 대한 이야기가 진행 중이라면 "오늘"이라고 표현하지 말 것.
 
 아래 대화록은 ${userName}의 실제 말투 예시야.
 ${userName}의 문장 리듬, 감탄사, 억양, 말끝, 문장 길이를 세밀하게 분석해 그대로 반영해.
@@ -328,27 +408,25 @@ ${styleProfile.characteristics.length > 0 ? styleProfile.characteristics.join('\
     const userName = user.name || 'User';
     this.logger.log(`[LLM] ✅ 사용자 찾음: ${userName} (${user.email})`);
 
-    // 2. 컨텍스트 수집 (병렬 처리) + 사용자 정의 지침 조회
-    this.logger.log(`[LLM] 2️⃣ 컨텍스트 수집 시작 (5개 병렬 쿼리)...`);
-    const [
-      recentContext,
-      similarContext,
-      styleProfile,
-      receiverInfo,
-      userStyleProfile,
-    ] = await Promise.all([
-      this.getRecentContext(userId, partnerId, 20),
-      this.getSimilarContext(userId, message, 15), // 5 → 15로 증가
-      this.getStyleProfile(userId),
-      this.getReceiverInfo(userId, partnerId),
-      // 사용자 정의 말투 지침 조회 (Raw Query로 타입 오류 회피)
-      this.prisma.$queryRaw<Array<{ custom_guidelines: string | null }>>`
+    // 2. 컨텍스트 수집 + 사용자 정의 지침 조회
+    // 대화 상대의 politeness를 먼저 알아야 그 수준에 맞는 톤샘플을 검색할 수 있어서
+    // getReceiverInfo는 먼저 조회하고, 나머지만 병렬로 처리한다.
+    this.logger.log(`[LLM] 2️⃣ 컨텍스트 수집 시작...`);
+    const receiverInfo = await this.getReceiverInfo(userId, partnerId);
+
+    const [recentContext, similarContext, styleProfile, userStyleProfile] =
+      await Promise.all([
+        this.getRecentContext(userId, partnerId, 20),
+        this.getSimilarContext(userId, message, 15, receiverInfo.politeness), // 5 → 15로 증가
+        this.getStyleProfile(userId),
+        // 사용자 정의 말투 지침 조회 (Raw Query로 타입 오류 회피)
+        this.prisma.$queryRaw<Array<{ custom_guidelines: string | null }>>`
         SELECT custom_guidelines
         FROM style_profiles
         WHERE user_id = ${userId}::uuid
         LIMIT 1
       `.then((rows) => rows[0] || null),
-    ]);
+      ]);
 
     const customGuidelines = userStyleProfile?.custom_guidelines || undefined;
 
@@ -503,26 +581,24 @@ ${styleProfile.characteristics.length > 0 ? styleProfile.characteristics.join('\
     const userName = user.name || 'User';
     this.logger.log(`[LLM] ✅ 사용자 찾음: ${userName} (${user.email})`);
 
-    // 2. 컨텍스트 수집 (병렬 처리) + 사용자 정의 지침 조회
-    this.logger.log(`[LLM] 2️⃣ 컨텍스트 수집 시작 (5개 병렬 쿼리)...`);
-    const [
-      recentContext,
-      similarContext,
-      styleProfile,
-      receiverInfo,
-      userStyleProfile,
-    ] = await Promise.all([
-      this.getRecentContext(userId, partnerId, 20),
-      this.getSimilarContext(userId, message, 15),
-      this.getStyleProfile(userId),
-      this.getReceiverInfo(userId, partnerId),
-      this.prisma.$queryRaw<Array<{ custom_guidelines: string | null }>>`
+    // 2. 컨텍스트 수집 + 사용자 정의 지침 조회
+    // 대화 상대의 politeness를 먼저 알아야 그 수준에 맞는 톤샘플을 검색할 수 있어서
+    // getReceiverInfo는 먼저 조회하고, 나머지만 병렬로 처리한다.
+    this.logger.log(`[LLM] 2️⃣ 컨텍스트 수집 시작...`);
+    const receiverInfo = await this.getReceiverInfo(userId, partnerId);
+
+    const [recentContext, similarContext, styleProfile, userStyleProfile] =
+      await Promise.all([
+        this.getRecentContext(userId, partnerId, 20),
+        this.getSimilarContext(userId, message, 15, receiverInfo.politeness),
+        this.getStyleProfile(userId),
+        this.prisma.$queryRaw<Array<{ custom_guidelines: string | null }>>`
         SELECT custom_guidelines
         FROM style_profiles
         WHERE user_id = ${userId}::uuid
         LIMIT 1
       `.then((rows) => rows[0] || null),
-    ]);
+      ]);
 
     const customGuidelines = userStyleProfile?.custom_guidelines || undefined;
 
@@ -623,9 +699,9 @@ ${styleProfile.characteristics.length > 0 ? styleProfile.characteristics.join('\
     // 기본 제약 조건
     const defaultConstraints = `
 [답변 제약 조건]
-- 제공된 말투 예시를 참고하여 자연스럽게 답변
+- ${this.politenessInstruction(receiverInfo.politeness)}
+- 제공된 말투 예시는 문장 리듬·감탄사·어휘 참고용이며, 예시의 종결어미가 위 존댓말/반말 지시와 다르면 지시를 따를 것
 - 대화 상대와의 관계(${receiverInfo.category})에 맞는 격식 수준 유지
-- 관계 정보가 없는 대상(ACQUAINTANCE_CASUAL)에게는 격식 있는 존댓말 사용
 - 최근 대화 맥락을 고려하여 일관성 있는 톤 유지
 `;
 
@@ -640,6 +716,8 @@ ${styleProfile.characteristics.length > 0 ? styleProfile.characteristics.join('\
 ${constraints}
 
 ⚠️ 위 규칙은 절대적이며, 어떤 경우에도 위반해서는 안 됨. 특히 문장부호 사용 금지 규칙이 있다면 반드시 지켜야 함.
+
+⚠️ [최근 대화 맥락]에 언급된 시점(요일·날짜 등)과 답변의 시제가 어긋나지 않게 할 것. 예를 들어 특정 요일(예: 월요일)에 대한 이야기가 진행 중이라면 "오늘"이라고 표현하지 말 것.
 
 아래 대화록은 ${userName}의 실제 말투 예시야.
 ${userName}의 문장 리듬, 감탄사, 억양, 말끝, 문장 길이를 세밀하게 분석해 그대로 반영해.
@@ -661,6 +739,8 @@ ${styleProfile.characteristics.length > 0 ? styleProfile.characteristics.join('\
 **중요: 아래 메시지에 대해 2가지 답변을 생성해줘:**
 1. **긍정적인 답변 (YES)**: 동의하거나 수락하는 긍정적인 반응
 2. **부정적인 답변 (NO)**: 거절하거나 불가능하다는 부정적인 반응
+   - ${this.politenessInstruction(receiverInfo.politeness)}는 NO 답변 문장 전체(거절 이유 + 재약속 제안)에 동일하게 적용됨. 앞 절만 반말로 쓰고 끝만 존댓말로 바꾸는 식으로 섞지 말 것
+   - 형식 예시(내용은 참고하지 말고 어체만 참고): "${this.declineExample(receiverInfo.politeness)}"
 
 각 답변은 ${userName}의 말투를 완벽히 모방하며, 최대 2-3문장 이내로 자연스럽고 짧게 작성해.
 
