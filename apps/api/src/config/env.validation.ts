@@ -37,14 +37,17 @@ export const envValidationSchema = Joi.object({
   EMBEDDING_URL: Joi.string().uri().default('http://localhost:8000'),
 
   // 텔레그램 봇은 선택 — 토큰이 없으면 봇만 비활성화되고 앱은 정상 부팅된다.
-  TELEGRAM_BOT_TOKEN: Joi.string().optional(),
-  // 봇을 켤 경우 수신 메시지를 귀속시킬 앱 사용자 UUID.
+  // 빈 문자열("")도 "없음"으로 취급한다: docker-compose 가 미설정 변수를
+  // TELEGRAM_BOT_TOKEN= 처럼 빈 값으로 주입하는 경우가 흔해서, allow('') 없으면
+  // Joi 가 "is not allowed to be empty" 로 부팅을 막는다.
+  TELEGRAM_BOT_TOKEN: Joi.string().allow('').optional(),
+  // 봇을 켤 경우(토큰이 비어있지 않을 때) 수신 메시지를 귀속시킬 앱 사용자 UUID.
   DEFAULT_USER_ID: Joi.string()
-    .guid({ version: 'uuidv4' })
+    .allow('')
     .when('TELEGRAM_BOT_TOKEN', {
-      is: Joi.exist(),
-      then: Joi.required(),
-      otherwise: Joi.optional(),
+      is: Joi.string().min(1).required(),
+      then: Joi.string().guid({ version: 'uuidv4' }).required(),
+      otherwise: Joi.string().guid({ version: 'uuidv4' }).allow('').optional(),
     }),
 });
 

@@ -40,6 +40,10 @@ coverage/
 # Docker 로컬 볼륨 (postgres 데이터)
 postgres_data/
 
+# DB 덤프 (볼륨 이관 스크립트 산출물)
+*.dump
+*.sql.gz
+
 # Python (임베딩 시각화 스크립트)
 __pycache__/
 *.py[cod]

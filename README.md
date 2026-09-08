@@ -12,8 +12,9 @@
 likemelikeme/
 ├── apps/
 │   ├── api/   # NestJS 백엔드 (구 likeme-like-me-api)
-│   └── web/   # React 프론트엔드 (구 likeme-like-me-web)
-└── docker-compose.yml   # (리팩토링 단계에서 추가)
+│   ├── web/   # React 프론트엔드 (구 likeme-like-me-web)
+│   └── embedding/   # KoSimCSE 임베딩 서비스 (FastAPI, Python)
+└── docker-compose.yml   # db + embedding + api 오케스트레이션
 ```
 
 원래 팀 프로젝트에서는 분업/협업을 위해 프론트엔드와 백엔드를 **분리된 두 저장소**
@@ -45,6 +46,22 @@ GitHub Flow. `main` 은 항상 배포 가능 상태를 유지하고, 작업 단�
 커밋 메시지는 Conventional Commits(`type(scope): subject`)를 따른다.
 
 ## 로컬 실행
+
+### Docker Compose (백엔드 전체 스택)
+
+```bash
+cp .env.example .env      # POSTGRES_PASSWORD / JWT_SECRET / OPENAI_API_KEY 등 입력
+docker compose up --build  # db(pgvector) + embedding(KoSimCSE) + api
+```
+
+`api` 는 `db`·`embedding` 이 healthy 된 뒤 기동하며, 시작 시 `prisma migrate deploy` 를
+스스로 실행한다. API 는 `http://localhost:3000`, Swagger 는 `/api`.
+
+> **기존 v1 데이터가 있다면** (`likeme-like-me-api_postgres_data` 볼륨) `docker compose up` 전에
+> `sh scripts/migrate-pg-volume.sh` 를 1회 실행해 새 볼륨으로 이관한다. (자세한 배경은
+> `docs/REFACTORING_LOG.md` 의 "루트 compose" / "트러블슈팅 #1")
+
+### 개별 앱 (비 Docker)
 
 각 앱의 `.env.example` 을 복사해 `.env` (api) 를 채운 뒤:
 

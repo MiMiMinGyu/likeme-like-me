@@ -37,11 +37,14 @@
   (deprecated 경고 해소), `postinstall`(`prisma generate`) 추가, `apps/web/.env.example` 신설.
   #6 은 Prisma VS Code 확장을 6 언어 서버로 고정(`prisma.config.ts` 감지 시 7 로 전환해
   `datasource.url` 오탐) + `schema.prisma` canonical 포맷 정규화. 아래 "환경변수" 섹션 참고.
-- **백엔드 Dockerfile 완료** (2026-09-08, 브랜치 `feat/dockerize-api`): `apps/api` 멀티스테이지
-  이미지(Node 24). 아래 "백엔드 Dockerfile" 섹션. `main` 병합 + `v1-dockerized` 태그만 남음.
+- **백엔드 Dockerfile 완료** (2026-09-08, PR #7 `03f0d72`, 태그 `v1-dockerized`): `apps/api`
+  멀티스테이지 이미지(Node 24). 아래 "백엔드 Dockerfile" 섹션.
+- **루트 docker-compose 완료** (2026-09-08, 브랜치 `refactor/compose`): `db`(pgvector/pgvector:pg16)
+  + `embedding` + `api` 3서비스. v1 데이터(PG15→PG16) `pg_dump`/restore 이관. 아래 "루트 compose" 섹션.
+  `main` 병합 + `v2-compose` 태그만 남음.
 
-**작업 중 브랜치**: `feat/dockerize-api` (커밋 직전). `main` = `6e5f387`.
-`refactor/env-config` 병합·삭제됨(원격 브랜치는 잔존 — GitHub 에서 정리).
+**작업 중 브랜치**: `refactor/compose` (커밋 직전). `main` = `03f0d72`.
+`feat/dockerize-api`·`refactor/env-config` 병합·삭제됨(원격 브랜치는 잔존 — GitHub 에서 정리).
 
 - **기능 테스트 완료** (2026-09-05~06): ⓐ 앱 부팅 ⓑ auth(JWT, bcrypt) ⓒ 텔레그램 봇 연동
   (실제 텔레그램 데스크탑 앱에서 메시지 송수신 ↔ 로컬 웹 UI가 SSE로 동일 대화를 실시간 반영하는
@@ -51,21 +54,22 @@
 
 ### 다음 세션 시작점 (2026-09-08~)
 
-**로드맵 1·2·3번 완료.** 3번(`feat/dockerize-api`)은 이번 세션에서 완료 — `main` 병합 +
-`v1-dockerized` 태그만 남음. 다음은 **4번(루트 docker-compose)**.
+**로드맵 1·2·3·4번 완료.** 4번(`refactor/compose`)은 이번 세션에서 완료 — `main` 병합 +
+`v2-compose` 태그만 남음. 다음은 **5번(AWS 배포)**.
 
-**컨테이너**: `chatbot_db`, `likeme-embedding` 둘 다 필요. 재부팅했으면 `docker start chatbot_db likeme-embedding`.
-API 이미지는 `likeme-api:v1` 로 빌드해 뒀음(로컬). 실행 예시는 "백엔드 Dockerfile" 섹션.
+**스택 기동**: 저장소 루트에서 `docker compose up --build`. 루트 `.env` 필요(`.env.example` 복사).
+개별 컨테이너 수동 관리(`docker start ...`) 불필요 — compose 가 db·embedding healthy 후 api 기동.
+데이터는 볼륨 `likemelikeme_db_data` (v1 볼륨에서 이관 완료). 옛 볼륨 `likeme-like-me-api_postgres_data`
+는 롤백 대비로 남겨둠 — 확인 후 `docker volume rm` 로 정리 가능.
 
 **다음 할 일 (우선순위 순)**
 1. ~~기능 테스트 수정분 커밋~~ — 완료 (`5b378ff`, PR #3·#4).
 2. ~~`refactor/env-config`~~ — 완료 (PR #5·#6).
-3. ~~Dockerfile(백엔드)~~ — 완료 (`feat/dockerize-api`). `main` 병합 후 `git tag v1-dockerized`.
-4. 루트 `docker-compose.yml`(백엔드 + DB + **embedding**) → `v2-compose`.
-   **주의**: 기존 데이터 볼륨은 `likeme-like-me-api_postgres_data` (아래 트러블슈팅 #1). 새 compose 에서
-   `external:` 로 물리거나 `pg_dump`/restore 로 이관. 새 위치에서 그냥 `docker compose up` 하면 빈 볼륨 생성됨.
-   `apps/embedding` 서비스도 편입, api 의 `EMBEDDING_URL` 을 서비스명으로.
-5. AWS 배포(EC2 또는 ECR) → `v3-aws`
+3. ~~Dockerfile(백엔드)~~ — 완료 (PR #7, 태그 `v1-dockerized`).
+4. ~~루트 `docker-compose.yml`~~ — 완료 (`refactor/compose`). `main` 병합 후 `git tag v2-compose`.
+5. AWS 배포(EC2 또는 ECR) → `v3-aws`.
+   - `apps/web` 도 이때 편입 검토 (nginx 서비스 or S3/CloudFront). v2 범위엔 미포함.
+   - 이미지 슬림화(api ~1.3GB), OpenAI 키/JWT 를 AWS Secrets Manager 로.
 
 **미결 / 나중에**
 - `npm audit`: `apps/api` 에 취약점 51개(critical 2) — 8개월 된 의존성 트리의 transitive. 로컬 개발 단계라 급하지 않음.
@@ -175,11 +179,64 @@ API 이미지는 `likeme-api:v1` 로 빌드해 뒀음(로컬). 실행 예시는 
 - Docker HEALTHCHECK → `healthy`.
 - **미실시**: JWT 인증 통과 후 `/llm/generate` end-to-end (OpenAI 크레딧 소모 → 사용자 판단).
 
-### v2-compose(4번) 로 넘길 것
-- API 서비스로 편입, `depends_on` DB(healthcheck)/embedding. `DATABASE_URL`·`EMBEDDING_URL` 을 서비스명으로.
-- 기존 데이터 볼륨 `likeme-like-me-api_postgres_data` 이관 (트러블슈팅 #1).
-- 옛 `apps/api/docker-compose.yml` 은 루트 compose 로 흡수 후 삭제.
-- 이미지 슬림화 검토(현재 1.3GB).
+### v2-compose(4번) 로 넘긴 것 → 아래 섹션에서 처리 완료
+
+---
+
+## 루트 docker-compose (v2-compose) — 2026-09-08, `refactor/compose`
+
+### As-Is
+- v1: `apps/api/Dockerfile` 은 있지만 실행은 `docker run` 에 `-e` 를 잔뜩 붙여 수동.
+  DB 는 옛 `apps/api/docker-compose.yml`(DB 만), embedding 은 `docker run` 으로 따로.
+- 3개를 각각 띄우고 네트워크·기동 순서를 사람이 챙겨야 함.
+
+### 문제 인식
+- "클론 → `docker compose up`" 한 방으로 떠야 재현 가능한 데모/포트폴리오가 됨.
+- 기동 순서: api 는 db·embedding 이 **준비된 뒤** 떠야 함(안 그러면 마이그레이션/임베딩 실패).
+- **데이터 이관 함정**(트러블슈팅 #1): 기존 데이터는 볼륨 `likeme-like-me-api_postgres_data`
+  (옛 compose 프로젝트명 prefix). 루트 compose 는 프로젝트명이 `likemelikeme` 라 그냥 띄우면
+  빈 볼륨을 새로 만든다. 게다가 옛 볼륨은 **PG15 + pgvector 0.5.1**, 새 이미지는 **PG16** →
+  데이터 디렉터리 직접 이어붙이기 불가.
+
+### To-Be
+- **루트 `docker-compose.yml`** — `name: likemelikeme`, 3 서비스:
+  - `db` — `pgvector/pgvector:pg16`(`ankane/pgvector` deprecated). `container_name: chatbot_db`,
+    `5433:5432` 유지(DBeaver 접속정보 보존), `pg_isready` healthcheck, 볼륨 `db_data`.
+  - `embedding` — `build: ./apps/embedding`. 포트 미노출(내부 전용). healthcheck 는 이미지 내장 사용.
+  - `api` — `build: ./apps/api`. `depends_on: {db: service_healthy, embedding: service_healthy}`.
+    `DATABASE_URL=...@db:5432/...`, `EMBEDDING_URL=http://embedding:8000` (compose 네트워크 서비스명).
+    시크릿은 루트 `.env` → `${VAR:?}` 로 주입(미설정 시 compose 가 먼저 에러). `3000:3000`.
+- **루트 `.env.example`** 신설 — compose 전용(비 Docker 로컬은 `apps/api/.env` 그대로).
+  루트 `.gitignore` 는 `.env` 이미 무시, `*.dump` 추가.
+- **`app.enableShutdownHooks()`** (`main.ts`) — 컨테이너 SIGTERM 에 `onModuleDestroy` 실행되게.
+  `docker compose stop` 시 `🔌 Prisma disconnected` 확인.
+- **빈 문자열 env 허용** (`env.validation.ts`) — compose 가 미설정 optional 변수를 `KEY=` 로
+  주입하면 Joi 가 "not allowed to be empty" 로 부팅을 막던 것 수정. `TELEGRAM_BOT_TOKEN`·
+  `DEFAULT_USER_ID` 에 `.allow('')`, `DEFAULT_USER_ID` 필수 조건을 "토큰이 **비어있지 않을 때**"로.
+- **옛 `apps/api/docker-compose.yml` 삭제** (루트로 흡수).
+
+### 데이터 이관 — `scripts/migrate-pg-volume.sh` (1회성)
+1. 옛 볼륨을 `pgvector/pgvector:pg15` 임시 컨테이너로 마운트·기동 → `pg_dump -Fc` (66MB).
+2. 새 compose `db`(PG16) 기동 → healthy 대기.
+3. `pg_restore --no-owner --no-comments` (빈 DB 로). `CREATE EXTENSION vector` 는 버전 핀이
+   없어 PG16 이미지의 pgvector 0.8.6 으로 그대로 생성됨.
+4. 옛 볼륨은 건드리지 않음 → 실패 시 옛 compose 로 롤백 가능.
+
+### 검증 (로컬)
+- `docker compose config` OK. `docker compose up --build` → db·embedding healthy 후 api 기동,
+  entrypoint `migrate deploy` → `No pending migrations to apply.` → `Nest application successfully started`.
+- 이관 후 행 수 **정확히 일치**: `tone_samples=17943`, `messages=60`, `users=2`, `partners=21`,
+  `relationships=18`. pgvector `0.5.1 → 0.8.6`, HNSW 인덱스 3개 유지, `_prisma_migrations` 9개 finished.
+- `GET /` 200, `GET /test-db` → `{2, 21, 18}`. `/llm/generate` 무인증 → 401(라우팅·가드 정상).
+- compose 네트워크 내 실제 임베딩 왕복: `api → embedding:8000/embed` (한국어 문장) → `200`, **768차원** 반환.
+- `docker compose stop api` → `🔌 Prisma disconnected` (shutdown hook 동작).
+- **미실시**: JWT 로그인 후 `/llm/generate` full e2e (데이터 보유 유저 비밀번호 없음 — 임베딩/DB/OpenAI
+  링크는 각각 위에서 개별 검증됨).
+
+### v3-aws(5번) 로 넘길 것
+- `apps/web` 편입(nginx 서비스 or S3/CloudFront).
+- 시크릿을 AWS Secrets Manager 로. api 이미지 슬림화(~1.3GB).
+- 옛 볼륨 `likeme-like-me-api_postgres_data` 정리.
 
 ---
 
