@@ -32,14 +32,16 @@
   자체 호스팅 `BM-K/KoSimCSE-roberta-multitask`(768). 아래 "임베딩 모델 교체" 섹션 참고.
   `tone_samples` 17,943행 재임베딩 + 질의 경로 교체 + before/after 검증(격리 레벨)까지.
 
-- **env 검증 리팩토링 완료** (2026-09-08, 브랜치 `refactor/env-config`): `apps/api` 부팅 시
+- **env 검증 리팩토링 완료** (2026-09-08, PR #5 `30a082e` + 후속 #6 `6e5f387`): `apps/api` 부팅 시
   Joi 스키마로 필수 env 검증, `|| 'default-secret'` 폴백 3곳 제거, `prisma.config.ts` 이전
   (deprecated 경고 해소), `postinstall`(`prisma generate`) 추가, `apps/web/.env.example` 신설.
-  아래 "환경변수" 섹션 참고.
+  #6 은 Prisma VS Code 확장을 6 언어 서버로 고정(`prisma.config.ts` 감지 시 7 로 전환해
+  `datasource.url` 오탐) + `schema.prisma` canonical 포맷 정규화. 아래 "환경변수" 섹션 참고.
+- **백엔드 Dockerfile 완료** (2026-09-08, 브랜치 `feat/dockerize-api`): `apps/api` 멀티스테이지
+  이미지(Node 24). 아래 "백엔드 Dockerfile" 섹션. `main` 병합 + `v1-dockerized` 태그만 남음.
 
-**작업 중 브랜치**: `refactor/env-config` (커밋 직전). `main` = `de38cdd`.
-`feat/embedding-kosimcse` 병합·삭제됨. 기능 테스트 세션 수정분은 `5b378ff`(fix) + `7343b8c`(docs)로
-커밋되어 PR #3·#4 로 병합 완료.
+**작업 중 브랜치**: `feat/dockerize-api` (커밋 직전). `main` = `6e5f387`.
+`refactor/env-config` 병합·삭제됨(원격 브랜치는 잔존 — GitHub 에서 정리).
 
 - **기능 테스트 완료** (2026-09-05~06): ⓐ 앱 부팅 ⓑ auth(JWT, bcrypt) ⓒ 텔레그램 봇 연동
   (실제 텔레그램 데스크탑 앱에서 메시지 송수신 ↔ 로컬 웹 UI가 SSE로 동일 대화를 실시간 반영하는
@@ -49,15 +51,16 @@
 
 ### 다음 세션 시작점 (2026-09-08~)
 
-**로드맵 1·2번 완료.** 1번(기능 테스트 수정분 커밋)은 PR #3·#4 로 병합. 2번(`refactor/env-config`)은
-이번 세션에서 완료 — 커밋 후 `main` 병합만 남음. 다음은 **3번(백엔드 Dockerfile)**.
+**로드맵 1·2·3번 완료.** 3번(`feat/dockerize-api`)은 이번 세션에서 완료 — `main` 병합 +
+`v1-dockerized` 태그만 남음. 다음은 **4번(루트 docker-compose)**.
 
 **컨테이너**: `chatbot_db`, `likeme-embedding` 둘 다 필요. 재부팅했으면 `docker start chatbot_db likeme-embedding`.
+API 이미지는 `likeme-api:v1` 로 빌드해 뒀음(로컬). 실행 예시는 "백엔드 Dockerfile" 섹션.
 
 **다음 할 일 (우선순위 순)**
-1. ~~이번 세션 변경분 커밋 (`llm.service.ts`, `ChatPage.jsx`)~~ — 완료 (`5b378ff`, PR #3·#4).
-2. ~~`refactor/env-config`~~ — 완료. 아래 "환경변수" 섹션. `main` 병합 남음.
-3. Dockerfile(백엔드) → `v1-dockerized`
+1. ~~기능 테스트 수정분 커밋~~ — 완료 (`5b378ff`, PR #3·#4).
+2. ~~`refactor/env-config`~~ — 완료 (PR #5·#6).
+3. ~~Dockerfile(백엔드)~~ — 완료 (`feat/dockerize-api`). `main` 병합 후 `git tag v1-dockerized`.
 4. 루트 `docker-compose.yml`(백엔드 + DB + **embedding**) → `v2-compose`.
    **주의**: 기존 데이터 볼륨은 `likeme-like-me-api_postgres_data` (아래 트러블슈팅 #1). 새 compose 에서
    `external:` 로 물리거나 `pg_dump`/restore 로 이관. 새 위치에서 그냥 `docker compose up` 하면 빈 볼륨 생성됨.
@@ -71,14 +74,17 @@
   아니므로 `refactor/env-config` 에서 추가 → `npm ci` 후 Prisma 클라이언트 자동 생성(enum 누락 tsc 실패 해소).
   단 **`bcrypt` 네이티브 빌드는 여전히 의존성 install-script** 라 별도 승인 필요:
   `npm approve-scripts bcrypt @swc/core @prisma/client @prisma/engines prisma` + `npm rebuild bcrypt`.
-  (`package.json#allowScripts` 항목은 커밋돼 있음 — `04098b5`.)
+  (`package.json#allowScripts` 항목은 커밋돼 있음 — `04098b5`.) **Docker 이미지 안에서는** `npm ci` 뒤
+  `npm rebuild bcrypt` 를 명시적으로 돌려 해결(빌더 스테이지에 `python3 make g++`).
 - ~~`package.json#prisma` 설정 deprecated~~ → `refactor/env-config` 에서 `prisma.config.ts` 로 이전 완료.
   주의: 설정 파일이 있으면 Prisma CLI 가 `.env` 자동 로드를 **중단**하므로 `prisma.config.ts` 상단에서
   `import 'dotenv/config'` 로 직접 로드한다 (`dotenv` 를 직속 devDependency 로 승격).
 - Prisma 를 `8.0.0-rc` 로 올리라는 알림이 뜨지만 무시 (npm `latest` 태그가 현재 RC 를 가리킴). `^6.18.0` 유지.
-- `apps/api/package.json#scripts.start:prod` 가 `node dist/main` 을 가리키지만 실제 빌드 산출물은
-  `dist/src/main.js` (루트에 `prisma/seed.ts` 등이 있어 tsc rootDir 가 `apps/api` 로 잡힘). 기존부터 있던
-  불일치 — env-config 범위 밖이라 손대지 않음. Dockerfile(3번) 에서 실행 경로 잡을 때 같이 정리.
+- ~~`start:prod` 가 `node dist/main` 인데 실제 산출물은 `dist/src/main.js`~~ → `feat/dockerize-api` 에서 해결.
+  `tsconfig.build.json` 에 `include: ["src/**/*"]` 추가(+`src/scripts/**` 제외)해서 rootDir 가 `src` 로
+  잡히게 → 산출물이 `dist/main.js`. `start:prod` 도 `dist/main.js` 로 수정.
+- API 이미지 크기 **~1.3GB** (node:24-slim 베이스 + prisma 엔진 + openai/telegraf/nestjs). v1 은 이대로 두고
+  나중에 슬림화(alpine, 또는 엔진 바이너리 정리) 여지 있음.
 
 ---
 
@@ -129,6 +135,51 @@
 | **빌드 side effect** | `prisma.config.ts` 가 tsc `include` 에 잡혀 `dist/prisma.config.js` 가 생기고 산출물이 `dist/src/` 로 밀림 → `tsconfig.build.json` 의 `exclude` 에 `prisma.config.ts` 추가(Prisma CLI 는 자체 ts 로더로 읽음). |
 | **에디터 side effect** | Prisma VS Code 확장(`31.12.8`)이 `prisma.config.ts` 존재를 보고 **Prisma 7 언어 서버**로 전환 → 7 에서 제거된 `datasource.url` 을 "no longer supported" 오류로 오탐(로컬 CLI `prisma@6.18` 은 `prisma validate` 통과). `.vscode/settings.json` 에 `"prisma.pinToPrisma6": true` 커밋해 6 언어 서버로 고정. |
 | **검증** | `npm run build` OK. 정상 `.env` 로 `Nest application successfully started` + `Prisma connected`. `JWT_SECRET=tooshort` 로 부팅 시 `Config validation error: "JWT_SECRET" length must be at least 32 characters long` 로 즉시 종료. |
+
+---
+
+## 백엔드 Dockerfile (v1-dockerized) — 2026-09-08, `feat/dockerize-api`
+
+### As-Is
+- `apps/api` 는 로컬 `npm run start:dev` 로만 실행. 컨테이너 이미지 없음.
+- `apps/api/docker-compose.yml` 은 **DB 만** 띄우는 옛 파일(트러블슈팅 #1 의 그 compose). API 는 호스트에서.
+- `start:prod` = `node dist/main` 인데 `nest build` 산출물은 `dist/src/main.js` (rootDir 오추론).
+
+### 문제 인식
+- 배포 타깃이 Docker/AWS. "내 노트북에선 됨" 을 없애려면 실행 환경을 이미지로 고정해야 함.
+- npm 11 의 install-script 차단 때문에 순진하게 `npm ci` 만으로는 `bcrypt`(네이티브) 가 안 빌드됨.
+- Prisma 는 런타임에 `openssl`, 마이그레이션엔 CLI + 스키마 + `migrations/` 가 이미지 안에 있어야 함.
+- `prisma` 가 devDependency 라 `npm prune --omit=dev` 하면 사라짐 → 컨테이너가 자체 마이그레이션 불가.
+
+### To-Be
+- **`apps/api/Dockerfile`** — 멀티스테이지(`node:24-bookworm-slim`).
+  - build 스테이지: `python3 make g++ openssl` 설치 → `npm ci` → `npm rebuild bcrypt` →
+    `npm run build` → `npm prune --omit=dev` → `npm rebuild bcrypt`(prune 후 재확인).
+  - runtime 스테이지: `openssl` 만. prune 된 `node_modules` + `dist` + `prisma/` + `prisma.config.ts` 복사.
+    `USER node`(비루트), `NODE_ENV=production`, `EXPOSE 3000`.
+    HEALTHCHECK 는 별도 패키지 없이 node 내장 `http` 로 `GET /` 200 확인(slim 에 curl/wget 없음).
+- **`docker-entrypoint.sh`** — `RUN_MIGRATIONS`(기본 true)면 `./node_modules/.bin/prisma migrate deploy`
+  후 `exec "$@"`. `exec` 로 Node 를 PID 1 로 만들어 SIGTERM → graceful shutdown.
+- **`prisma` 를 devDependency → dependency 로 이동** (`npm prune` 후에도 CLI 가 이미지에 남도록).
+  `package-lock.json` 재생성. `ts-node`(seed 용)는 이미지에 불필요하므로 devDependency 유지.
+- **빌드 산출물 경로 정리** — `tsconfig.build.json` 에 `include: ["src/**/*"]` + `src/scripts/**` 제외.
+  rootDir 가 `src` 로 잡혀 산출물이 `dist/main.js`. 분석 스크립트 11개는 이미지에서 빠짐. `start:prod` 도 `dist/main.js`.
+- **`.dockerignore`** 신설 — `node_modules`, `dist`, `.env*`, `test`, `src/scripts`, `*.md`, `ai-reference` 등.
+
+### 검증 (로컬)
+- `docker build -t likeme-api:v1 apps/api` 성공 (이미지 ~1.3GB). `bcrypt` 재빌드 OK.
+- `docker run` (DB=`host.docker.internal:5433`, EMBEDDING=`host.docker.internal:8000`):
+  entrypoint `migrate deploy` → `No pending migrations to apply.` → `Nest application successfully started`.
+- `GET /` → `200 Hello World!`, `GET /test-db` → `{users:2, partners:21, relationships:18}`.
+- 컨테이너 내부에서 `GET embedding:8000/health` → `200 {status:ok, dim:768}`.
+- Docker HEALTHCHECK → `healthy`.
+- **미실시**: JWT 인증 통과 후 `/llm/generate` end-to-end (OpenAI 크레딧 소모 → 사용자 판단).
+
+### v2-compose(4번) 로 넘길 것
+- API 서비스로 편입, `depends_on` DB(healthcheck)/embedding. `DATABASE_URL`·`EMBEDDING_URL` 을 서비스명으로.
+- 기존 데이터 볼륨 `likeme-like-me-api_postgres_data` 이관 (트러블슈팅 #1).
+- 옛 `apps/api/docker-compose.yml` 은 루트 compose 로 흡수 후 삭제.
+- 이미지 슬림화 검토(현재 1.3GB).
 
 ---
 

@@ -1,10 +1,17 @@
 {
   "extends": "./tsconfig.json",
+  // src 만 컴파일한다. 이렇게 해야 tsc 가 rootDir 을 src 로 잡아
+  // 산출물이 dist/main.js 로 떨어진다 (예전엔 루트의 prisma/seed.ts 등이
+  // 함께 잡혀 dist/src/main.js 로 밀렸음 → start:prod / Docker CMD 와 불일치).
+  "include": ["src/**/*"],
   "exclude": [
     "node_modules",
     "test",
     "dist",
     "**/*spec.ts",
+    // 분석·점검용 일회성 스크립트. 서버 런타임과 무관하므로 이미지에 넣지 않는다
+    // (필요할 때 ts-node 로 직접 실행).
+    "src/scripts/**",
     "prisma.config.ts"
   ]
 }
