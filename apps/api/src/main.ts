@@ -17,6 +17,10 @@ async function bootstrap() {
   // 전역 유효성 검증 파이프 설정 (DTO 검증용)
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
 
+  // 컨테이너 SIGTERM(docker stop / compose down) 시 onModuleDestroy 훅 실행
+  // → PrismaService.$disconnect 등 정리 후 종료
+  app.enableShutdownHooks();
+
   // Swagger 설정 - API 문서화를 위해 추가
   const config = new DocumentBuilder()
     .setTitle('LikeMe API')
