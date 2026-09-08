@@ -1,0 +1,8 @@
+{
+  // 이 프로젝트는 Prisma ^6.18.0 에 고정돼 있다 (docs/REFACTORING_LOG.md 참고).
+  // Prisma VS Code 확장은 prisma.config.ts 를 보면 기본적으로 Prisma 7 언어 서버로
+  // 전환하는데, 7 에서는 datasource 블록의 `url` 이 제거돼 정상 스키마를
+  // "url is no longer supported" 오류로 오탐한다. 6 언어 서버로 고정해 해소.
+  "prisma.pinToPrisma6": true,
+  "prisma.hidePrisma6Prompts": true
+}

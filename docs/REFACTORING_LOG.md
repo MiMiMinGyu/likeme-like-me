@@ -127,6 +127,7 @@
 | **postinstall** | `apps/api/package.json#scripts` 에 `"postinstall": "prisma generate"`. 루트 프로젝트 자신의 스크립트라 npm 11 install-script 차단 대상 아님 → `npm ci` 후 클라이언트 자동 생성. |
 | **web** | `apps/web/.env.example` 신설(Vite 로딩 규칙 주석 + `VITE_API_BASE_URL`). 루트 `.gitignore` 정리: `apps/api/.env.development`·`.env.production` 무시 규칙 삭제(파일 없음), `!apps/web/.env.production` 추적 허용 추가. |
 | **빌드 side effect** | `prisma.config.ts` 가 tsc `include` 에 잡혀 `dist/prisma.config.js` 가 생기고 산출물이 `dist/src/` 로 밀림 → `tsconfig.build.json` 의 `exclude` 에 `prisma.config.ts` 추가(Prisma CLI 는 자체 ts 로더로 읽음). |
+| **에디터 side effect** | Prisma VS Code 확장(`31.12.8`)이 `prisma.config.ts` 존재를 보고 **Prisma 7 언어 서버**로 전환 → 7 에서 제거된 `datasource.url` 을 "no longer supported" 오류로 오탐(로컬 CLI `prisma@6.18` 은 `prisma validate` 통과). `.vscode/settings.json` 에 `"prisma.pinToPrisma6": true` 커밋해 6 언어 서버로 고정. |
 | **검증** | `npm run build` OK. 정상 `.env` 로 `Nest application successfully started` + `Prisma connected`. `JWT_SECRET=tooshort` 로 부팅 시 `Config validation error: "JWT_SECRET" length must be at least 32 characters long` 로 즉시 종료. |
 
 ---
