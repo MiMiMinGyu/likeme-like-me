@@ -119,8 +119,7 @@ export class AuthService {
     try {
       // Refresh Token 검증
       const payload = this.jwtService.verify<JwtPayload>(refreshToken, {
-        secret:
-          this.configService.get<string>('JWT_SECRET') || 'default-secret',
+        secret: this.configService.getOrThrow<string>('JWT_SECRET'),
       });
 
       // DB에서 사용자 조회

@@ -32,8 +32,14 @@
   자체 호스팅 `BM-K/KoSimCSE-roberta-multitask`(768). 아래 "임베딩 모델 교체" 섹션 참고.
   `tone_samples` 17,943행 재임베딩 + 질의 경로 교체 + before/after 검증(격리 레벨)까지.
 
-**작업 중 브랜치**: 없음. `main` = `c098e38`. `feat/embedding-kosimcse` 병합·삭제됨.
-기능 테스트 세션(2026-09-05~06)에서 나온 수정분은 아직 미커밋 상태 — 아래 "기능 테스트" 섹션 참고.
+- **env 검증 리팩토링 완료** (2026-09-08, 브랜치 `refactor/env-config`): `apps/api` 부팅 시
+  Joi 스키마로 필수 env 검증, `|| 'default-secret'` 폴백 3곳 제거, `prisma.config.ts` 이전
+  (deprecated 경고 해소), `postinstall`(`prisma generate`) 추가, `apps/web/.env.example` 신설.
+  아래 "환경변수" 섹션 참고.
+
+**작업 중 브랜치**: `refactor/env-config` (커밋 직전). `main` = `de38cdd`.
+`feat/embedding-kosimcse` 병합·삭제됨. 기능 테스트 세션 수정분은 `5b378ff`(fix) + `7343b8c`(docs)로
+커밋되어 PR #3·#4 로 병합 완료.
 
 - **기능 테스트 완료** (2026-09-05~06): ⓐ 앱 부팅 ⓑ auth(JWT, bcrypt) ⓒ 텔레그램 봇 연동
   (실제 텔레그램 데스크탑 앱에서 메시지 송수신 ↔ 로컬 웹 UI가 SSE로 동일 대화를 실시간 반영하는
@@ -41,20 +47,16 @@
   (React/Vite) 기동까지 전부 확인. 과정에서 UI 버그 1건 + RAG/프롬프트 톤 일관성 버그(5개 원인
   레이어) + dev 서버 orphan 프로세스 반복 이슈를 발견·수정. 상세는 "## 기능 테스트 트러블슈팅" 섹션.
 
-### 다음 세션 시작점 (2026-09-06~)
+### 다음 세션 시작점 (2026-09-08~)
 
-**기능 테스트 로드맵 1번 항목(ⓐ~ⓔ) 전부 완료.** 이번 세션에서 고친 `llm.service.ts` 변경분
-(politeness 필터, 프롬프트 수정)과 `ChatPage.jsx`(자동 스크롤) 변경분은 아직 미커밋 — 다음 세션
-시작 시 `git status`로 diff 확인 후 커밋부터 정리.
+**로드맵 1·2번 완료.** 1번(기능 테스트 수정분 커밋)은 PR #3·#4 로 병합. 2번(`refactor/env-config`)은
+이번 세션에서 완료 — 커밋 후 `main` 병합만 남음. 다음은 **3번(백엔드 Dockerfile)**.
 
 **컨테이너**: `chatbot_db`, `likeme-embedding` 둘 다 필요. 재부팅했으면 `docker start chatbot_db likeme-embedding`.
 
 **다음 할 일 (우선순위 순)**
-1. 이번 세션 변경분 커밋 (`llm.service.ts`, `ChatPage.jsx`) — 커밋 전 diff 재검토.
-2. `refactor/env-config`: `apps/api` Joi 검증 스키마 추가(의존성에 `joi` 이미 있음),
-   `JWT_SECRET` 등 필수 env 부팅 시 검증 + `|| 'default-secret'` 폴백 제거, `.env.development` 삭제 반영,
-   `apps/web/.env.example` 신설. `prisma.config.ts` 이전(에디터 env 오탐 + deprecated 경고 동시 해소).
-   `npm ci` 후 자동 빌드되도록 `postinstall` 정리.
+1. ~~이번 세션 변경분 커밋 (`llm.service.ts`, `ChatPage.jsx`)~~ — 완료 (`5b378ff`, PR #3·#4).
+2. ~~`refactor/env-config`~~ — 완료. 아래 "환경변수" 섹션. `main` 병합 남음.
 3. Dockerfile(백엔드) → `v1-dockerized`
 4. 루트 `docker-compose.yml`(백엔드 + DB + **embedding**) → `v2-compose`.
    **주의**: 기존 데이터 볼륨은 `likeme-like-me-api_postgres_data` (아래 트러블슈팅 #1). 새 compose 에서
@@ -65,12 +67,18 @@
 **미결 / 나중에**
 - `npm audit`: `apps/api` 에 취약점 51개(critical 2) — 8개월 된 의존성 트리의 transitive. 로컬 개발 단계라 급하지 않음.
   `npm audit fix --force` 금지(고정 버전 깨짐). 별도 `chore(deps)` 로 개별 처리.
-- npm 11 의 install-script 차단: `bcrypt` 네이티브 빌드, `@prisma/client` 의 `prisma generate` postinstall 이 안 됨.
-  → `npx prisma generate` 는 수동 실행해 둠(클라이언트에 enum 누락으로 `tsc` 실패하던 것 해소).
-  앱 부팅 전 `npm approve-scripts bcrypt @swc/core @prisma/client @prisma/engines prisma` + `npm rebuild bcrypt` 필요.
-  `npm ci` 로 새로 설치하면 다시 재현되므로 3번(env-config)에서 `postinstall` 스크립트 정리와 함께 처리.
-- `package.json#prisma` 설정 deprecated (Prisma 7 에서 제거) → `prisma.config.ts` 이전은 3번 또는 별도 chore.
+- npm 11 의 install-script 차단: 루트 프로젝트 자신의 `postinstall`(`prisma generate`)은 차단 대상이
+  아니므로 `refactor/env-config` 에서 추가 → `npm ci` 후 Prisma 클라이언트 자동 생성(enum 누락 tsc 실패 해소).
+  단 **`bcrypt` 네이티브 빌드는 여전히 의존성 install-script** 라 별도 승인 필요:
+  `npm approve-scripts bcrypt @swc/core @prisma/client @prisma/engines prisma` + `npm rebuild bcrypt`.
+  (`package.json#allowScripts` 항목은 커밋돼 있음 — `04098b5`.)
+- ~~`package.json#prisma` 설정 deprecated~~ → `refactor/env-config` 에서 `prisma.config.ts` 로 이전 완료.
+  주의: 설정 파일이 있으면 Prisma CLI 가 `.env` 자동 로드를 **중단**하므로 `prisma.config.ts` 상단에서
+  `import 'dotenv/config'` 로 직접 로드한다 (`dotenv` 를 직속 devDependency 로 승격).
 - Prisma 를 `8.0.0-rc` 로 올리라는 알림이 뜨지만 무시 (npm `latest` 태그가 현재 RC 를 가리킴). `^6.18.0` 유지.
+- `apps/api/package.json#scripts.start:prod` 가 `node dist/main` 을 가리키지만 실제 빌드 산출물은
+  `dist/src/main.js` (루트에 `prisma/seed.ts` 등이 있어 tsc rootDir 가 `apps/api` 로 잡힘). 기존부터 있던
+  불일치 — env-config 범위 밖이라 손대지 않음. Dockerfile(3번) 에서 실행 경로 잡을 때 같이 정리.
 
 ---
 
@@ -108,6 +116,18 @@
 - **원칙**: "파일명 통일"이 아니라 **"비밀은 gitignore, 공개 빌드 설정은 커밋 가능"**. api ≠ web 이어도 됨.
 - 이미 반영: `apps/api/.env.example` 최신화 (JWT/OpenAI/DEFAULT_USER_ID 키 + 주석 추가). `.env.development` 는
   사용자가 수동 삭제함.
+
+### 실행 결과 (2026-09-08, `refactor/env-config`)
+
+| 항목 | 내용 |
+|---|---|
+| **Joi 부팅 검증** | `src/config/env.validation.ts` 신설. `DATABASE_URL`·`JWT_SECRET`(min 32)·`OPENAI_API_KEY` 필수, `PORT`/`NODE_ENV`/`EMBEDDING_URL`/JWT 만료값은 `default()`. `TELEGRAM_BOT_TOKEN` 은 선택, 있으면 `DEFAULT_USER_ID`(uuidv4) 를 `when()` 으로 필수화. `allowUnknown:true`(compose 전용 `POSTGRES_PASSWORD` 통과), `abortEarly:false`(위반 전부 보고). `ConfigModule.forRoot({ validationSchema, validationOptions })` 에 연결. |
+| **폴백 제거** | `auth.module.ts` / `auth.service.ts` / `jwt.strategy.ts` 의 `configService.get('JWT_SECRET') \|\| 'default-secret'` → `getOrThrow('JWT_SECRET')`. Joi 가 부팅을 막으므로 런타임에선 도달 불가지만 방어적으로. |
+| **prisma.config.ts** | `package.json#prisma` 삭제 → `apps/api/prisma.config.ts`(`schema` + `migrations.seed`). 설정 파일이 있으면 CLI 가 `.env` 자동 로드를 안 하므로 `import 'dotenv/config'` 추가, `dotenv` 를 직속 devDependency 로. `prisma validate`/`migrate status` 정상(DB 연결·9 migrations up to date). |
+| **postinstall** | `apps/api/package.json#scripts` 에 `"postinstall": "prisma generate"`. 루트 프로젝트 자신의 스크립트라 npm 11 install-script 차단 대상 아님 → `npm ci` 후 클라이언트 자동 생성. |
+| **web** | `apps/web/.env.example` 신설(Vite 로딩 규칙 주석 + `VITE_API_BASE_URL`). 루트 `.gitignore` 정리: `apps/api/.env.development`·`.env.production` 무시 규칙 삭제(파일 없음), `!apps/web/.env.production` 추적 허용 추가. |
+| **빌드 side effect** | `prisma.config.ts` 가 tsc `include` 에 잡혀 `dist/prisma.config.js` 가 생기고 산출물이 `dist/src/` 로 밀림 → `tsconfig.build.json` 의 `exclude` 에 `prisma.config.ts` 추가(Prisma CLI 는 자체 ts 로더로 읽음). |
+| **검증** | `npm run build` OK. 정상 `.env` 로 `Nest application successfully started` + `Prisma connected`. `JWT_SECRET=tooshort` 로 부팅 시 `Config validation error: "JWT_SECRET" length must be at least 32 characters long` 로 즉시 종료. |
 
 ---
 
