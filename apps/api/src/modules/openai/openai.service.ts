@@ -11,6 +11,10 @@ import {
 export class OpenaiService {
   private readonly logger = new Logger(OpenaiService.name);
   private readonly client: OpenAI;
+  // 채팅 모델명은 env 로 뺀다. OpenAI 가 모델을 retire 하면(예: gpt-4o-mini)
+  // 코드 수정·재배포 없이 배포 환경의 OPENAI_MODEL 만 바꿔 대응하기 위함.
+  // 미설정 시 Joi 스키마의 default('gpt-4o-mini') 가 주입된다.
+  private readonly chatModel: string;
 
   constructor(private readonly config: ConfigService) {
     const apiKey = this.config.get<string>('OPENAI_API_KEY');
@@ -21,7 +25,11 @@ export class OpenaiService {
     }
 
     this.client = new OpenAI({ apiKey });
-    this.logger.log('OpenAI client initialized successfully');
+    this.chatModel =
+      this.config.get<string>('OPENAI_MODEL') || 'gpt-4o-mini';
+    this.logger.log(
+      `OpenAI client initialized successfully (chat model: ${this.chatModel})`,
+    );
   }
 
   /**
@@ -91,7 +99,7 @@ export class OpenaiService {
   ): Promise<ChatCompletionResponse> {
     try {
       const response = await this.client.chat.completions.create({
-        model: options?.model || 'gpt-4o-mini',
+        model: options?.model || this.chatModel,
         messages: messages as OpenAI.Chat.ChatCompletionMessageParam[],
         temperature: options?.temperature ?? 0.7,
         max_tokens: options?.maxTokens ?? 60,

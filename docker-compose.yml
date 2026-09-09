@@ -61,6 +61,8 @@ services:
       JWT_ACCESS_EXPIRES_IN: ${JWT_ACCESS_EXPIRES_IN:-15m}
       JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-30d}
       OPENAI_API_KEY: ${OPENAI_API_KEY:?OPENAI_API_KEY 를 .env 에 설정하세요}
+      # 채팅 모델명 — 미설정 시 앱이 gpt-4o-mini 로 폴백
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
       # 텔레그램 봇은 선택 — 비우면 봇만 비활성화, 앱은 정상 부팅
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       DEFAULT_USER_ID: ${DEFAULT_USER_ID:-}

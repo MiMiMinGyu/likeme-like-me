@@ -10,7 +10,11 @@
 # ==============================================================================
 
 # ------------------------------------------------------------------ build stage
-FROM node:24-bookworm-slim AS build
+# 베이스 이미지는 digest 로 고정한다. 태그(24-bookworm-slim)는 재배포 시점마다
+# 다른 이미지를 가리킬 수 있어, 몇 달 뒤 재배포해도 동일 빌드가 나오도록 못박음.
+#   digest 갱신: docker manifest inspect node:24-bookworm-slim
+#   고정 시각: 2026-09-09 (멀티아치 인덱스 digest — arm64 재빌드해도 유효)
+FROM node:24-bookworm-slim@sha256:ba849c60be29959425b8734d57b8b4b7d56f98edd9504c9af091d5281095a71e AS build
 
 # bcrypt 네이티브 컴파일용 툴체인 + Prisma 엔진이 링크하는 openssl
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -38,7 +42,8 @@ RUN npm run build \
  && npm rebuild bcrypt
 
 # ---------------------------------------------------------------- runtime stage
-FROM node:24-bookworm-slim AS runtime
+# build 스테이지와 동일 digest (위 주석 참고)
+FROM node:24-bookworm-slim@sha256:ba849c60be29959425b8734d57b8b4b7d56f98edd9504c9af091d5281095a71e AS runtime
 
 # Prisma query engine 가 런타임에 openssl 을 필요로 함
 RUN apt-get update && apt-get install -y --no-install-recommends \
