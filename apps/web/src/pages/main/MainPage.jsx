@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { telegramAPI } from '../../api/endpoints/chat';
 import { refreshAccessToken } from '../../api/clients/http';
+import { API_BASE_URL } from '../../config';
 import Header from '../../components/layout/Header';
 import styles from './MainPage.module.css';
 
@@ -19,7 +20,7 @@ const MainPage = () => {
     const connectSSE = () => {
       // SSE로 실시간 메시지 수신 (토큰을 쿼리 파라미터로 전달)
       const token = localStorage.getItem('access_token');
-      const sseUrl = `http://localhost:3000/telegram/events?token=${token}`;
+      const sseUrl = `${API_BASE_URL}/telegram/events?token=${token}`;
       console.log('📡 [SSE] 연결 시도:', sseUrl);
 
       eventSource = new EventSource(sseUrl);

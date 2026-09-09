@@ -1,0 +1,38 @@
+# ==============================================================================
+# 프로덕션(단일 EC2) 오버레이.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+#   - api·web·embedding 은 빌드하지 않고 ECR 에서 pull (CI 또는 로컬에서 push 해둔 것).
+#   - db 는 Docker Hub 공식 pgvector 이미지를 digest 로 고정해 사용.
+#   - 노출 포트는 web 80/443 뿐 (docker-compose.override.yml 을 안 읽으므로
+#     db 5433 / api 3000 매핑이 없다).
+#   - 시크릿·도메인은 EC2 의 .env 에서 주입 (D단계: fetch-secrets.sh 가 SSM 에서 생성).
+#     ECR_REGISTRY  예) 123456789012.dkr.ecr.ap-northeast-2.amazonaws.com
+#     IMAGE_TAG     ECR 에 push 한 태그 (기본 latest, git SHA 권장)
+#     SITE_ADDRESS  도메인 (예: likemelikeme.duckdns.org) — Caddy Let's Encrypt 발급
+#
+#   요구: Docker Compose v2.24+ (`!reset` 태그).
+# ==============================================================================
+
+services:
+  db:
+    image: pgvector/pgvector:pg16@sha256:ccc6e83d6e35e931dc7c5def2022729d5a6c370318d099181995567ff1fb4d6b
+
+  embedding:
+    build: !reset null
+    image: "${ECR_REGISTRY:?set ECR_REGISTRY in .env}/likeme-embedding:${IMAGE_TAG:-latest}"
+    pull_policy: always
+
+  api:
+    build: !reset null
+    image: "${ECR_REGISTRY:?set ECR_REGISTRY in .env}/likeme-api:${IMAGE_TAG:-latest}"
+    pull_policy: always
+
+  web:
+    build: !reset null
+    image: "${ECR_REGISTRY:?set ECR_REGISTRY in .env}/likeme-web:${IMAGE_TAG:-latest}"
+    pull_policy: always
+    environment:
+      # prod 에서는 도메인 필수 — Caddy 가 이 값으로 Let's Encrypt 인증서를 발급한다.
+      SITE_ADDRESS: "${SITE_ADDRESS:?set SITE_ADDRESS (domain) in .env}"

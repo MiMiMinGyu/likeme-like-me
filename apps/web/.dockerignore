@@ -1,0 +1,17 @@
+node_modules
+dist
+dist-ssr
+*.local
+*.log
+
+# 문서 / 에디터
+docs
+*.md
+.vscode
+.idea
+.DS_Store
+
+# dev 전용 env (프로덕션 빌드는 .env.production 만 사용)
+.env
+.env.development
+.env.*.local

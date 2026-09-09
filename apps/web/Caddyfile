@@ -1,0 +1,25 @@
+# LikemeLikeMe — 프론트(SPA) 서빙 + API 리버스 프록시 단일 진입점
+#
+#   SITE_ADDRESS 환경변수로 동작 모드가 갈린다:
+#     :80                       → 평문 HTTP (로컬 compose 데모)
+#     likemelikeme.duckdns.org  → Let's Encrypt 자동 발급 (HTTP-01), HTTPS 강제
+#
+#   API 컨테이너는 compose 네트워크에서 서비스명 `api`, 포트 3000 으로 접근.
+
+{$SITE_ADDRESS:80} {
+	encode gzip
+
+	# --- API 라우트: NestJS 컨트롤러 prefix 목록과 일치시킬 것 ---
+	#   auth / llm / telegram / relationships / kakao (+ 데모 확인용 /test-db)
+	@api path /auth/* /llm/* /telegram/* /relationships/* /kakao/* /test-db
+	handle @api {
+		reverse_proxy api:3000
+	}
+
+	# --- 그 외 전부: SPA 정적 파일, 클라이언트 라우팅은 index.html 로 폴백 ---
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+}

@@ -1,8 +1,9 @@
 import axios from 'axios';
+import { API_BASE_URL } from '../../config';
 
 // axios 기본 설정 (단일한 HTTP 클라이언트 인스턴스)
 const api = axios.create({
-  baseURL: 'http://localhost:3000',
+  baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -18,7 +19,7 @@ export const refreshAccessToken = async () => {
       throw new Error('No refresh token');
     }
 
-    const response = await axios.post('http://localhost:3000/auth/refresh', {
+    const response = await axios.post(`${API_BASE_URL}/auth/refresh`, {
       refresh_token: refreshToken
     });
 

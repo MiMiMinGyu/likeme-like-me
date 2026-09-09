@@ -1,0 +1,13 @@
+# Terraform 로컬 상태·캐시 (상태엔 시크릿이 섞일 수 있어 커밋 금지)
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+*.tfvars
+!*.tfvars.example
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+# .terraform.lock.hcl 은 커밋한다 (provider 버전 고정)

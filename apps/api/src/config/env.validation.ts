@@ -33,6 +33,9 @@ export const envValidationSchema = Joi.object({
   // ── 외부 연동 ────────────────────────────────────────────────
   // GPT 답변 생성에 필수. (임베딩은 EMBEDDING_URL 의 자체 서비스 사용)
   OPENAI_API_KEY: Joi.string().required(),
+  // GPT 채팅 모델명. 코드에 문자열로 박지 않고 여기서 기본값을 준다 —
+  // OpenAI 가 모델을 retire 하면 배포 환경에서 이 값만 교체해 대응.
+  OPENAI_MODEL: Joi.string().default('gpt-4o-mini'),
   // KoSimCSE 임베딩 서비스. 로컬 기본값 제공, compose 에선 서비스명으로 주입.
   EMBEDDING_URL: Joi.string().uri().default('http://localhost:8000'),
 

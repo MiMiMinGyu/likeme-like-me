@@ -1,6 +1,9 @@
 # syntax=docker/dockerfile:1
 
-FROM python:3.11-slim
+# 베이스 이미지는 digest 로 고정 (몇 달 뒤 재배포해도 동일 빌드).
+#   태그 → digest 갱신: docker manifest inspect python:3.11-slim
+#   고정 시각: 2026-09-09  (python:3.11-slim, 멀티아치 인덱스 digest)
+FROM python:3.11-slim@sha256:9534e5a8e315485d4061ed659af0fd78a284c015f9b73661b41d6bab25604534
 
 ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
