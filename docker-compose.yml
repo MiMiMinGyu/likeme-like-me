@@ -72,5 +72,25 @@ services:
       - "3000:3000"
     restart: unless-stopped
 
+  web:
+    build: ./apps/web
+    image: likeme-web:latest
+    container_name: likeme-web
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      # :80 → 평문 HTTP(로컬 데모). 도메인(예: likemelikeme.duckdns.org) 을 주면
+      # Caddy 가 Let's Encrypt 인증서를 자동 발급하고 HTTPS 로 강제한다.
+      SITE_ADDRESS: ${SITE_ADDRESS:-:80}
+    ports:
+      - "${WEB_HTTP_PORT:-80}:80"
+      - "${WEB_HTTPS_PORT:-443}:443"
+    volumes:
+      # 발급받은 TLS 인증서 보존 (재기동 시 재발급 → rate limit 방지)
+      - caddy_data:/data
+    restart: unless-stopped
+
 volumes:
   db_data:
+  caddy_data:

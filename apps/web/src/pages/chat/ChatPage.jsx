@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { telegramAPI } from '../../api/endpoints/chat';
 import { relationshipAPI, RELATIONSHIP_LABELS, POLITENESS_LABELS, VIBE_LABELS } from '../../api/endpoints/relationship';
 import api, { refreshAccessToken } from '../../api/clients/http';
+import { API_BASE_URL } from '../../config';
 import Header from '../../components/layout/Header';
 import styles from './ChatPage.module.css';
 
@@ -188,7 +189,7 @@ const ChatPage = () => {
     const connectSSE = () => {
       // SSE 연결 시 토큰을 쿼리 파라미터로 전달
       const token = localStorage.getItem('access_token');
-      const sseUrl = `http://localhost:3000/telegram/events?token=${token}`;
+      const sseUrl = `${API_BASE_URL}/telegram/events?token=${token}`;
       console.log('📡 [SSE] 연결 시도:', sseUrl);
 
       eventSource = new EventSource(sseUrl);
