@@ -52,24 +52,30 @@
   (React/Vite) 기동까지 전부 확인. 과정에서 UI 버그 1건 + RAG/프롬프트 톤 일관성 버그(5개 원인
   레이어) + dev 서버 orphan 프로세스 반복 이슈를 발견·수정. 상세는 "## 기능 테스트 트러블슈팅" 섹션.
 
-### 다음 세션 시작점 (2026-09-08~)
+### 다음 세션 시작점 (2026-09-09~)
 
-**로드맵 1·2·3·4번 완료.** 4번(`refactor/compose`)은 이번 세션에서 완료 — `main` 병합 +
-`v2-compose` 태그만 남음. 다음은 **5번(AWS 배포)**.
+**로드맵 1·2·3·4번 완료. 5번(AWS 배포)은 "준비"까지 완료, "실제 실행"만 남음.**
+준비 작업(A~F)은 `refactor/aws-deploy` → `main` 병합 (PR #10 `af4ef91`).
+아래 "## v3-aws 배포 준비" 섹션 참고. `v3-aws` 태그는 실제 배포·검증 후에 단다.
 
-**스택 기동**: 저장소 루트에서 `docker compose up --build`. 루트 `.env` 필요(`.env.example` 복사).
-개별 컨테이너 수동 관리(`docker start ...`) 불필요 — compose 가 db·embedding healthy 후 api 기동.
-데이터는 볼륨 `likemelikeme_db_data` (v1 볼륨에서 이관 완료). 옛 볼륨 `likeme-like-me-api_postgres_data`
-는 롤백 대비로 남겨둠 — 확인 후 `docker volume rm` 로 정리 가능.
+**스택 기동**: `docker compose up --build` → db·embedding·api·**web(Caddy)** 4개.
+루트 `.env` 필요(`.env.example` 복사). `http://localhost` 로 접속 (Caddy 가 80 에서 SPA + api 프록시).
+데이터는 볼륨 `likemelikeme_db_data`.
 
-**다음 할 일 (우선순위 순)**
+**다음 할 일**
 1. ~~기능 테스트 수정분 커밋~~ — 완료 (`5b378ff`, PR #3·#4).
 2. ~~`refactor/env-config`~~ — 완료 (PR #5·#6).
 3. ~~Dockerfile(백엔드)~~ — 완료 (PR #7, 태그 `v1-dockerized`).
-4. ~~루트 `docker-compose.yml`~~ — 완료 (`refactor/compose`). `main` 병합 후 `git tag v2-compose`.
-5. AWS 배포(EC2 또는 ECR) → `v3-aws`.
-   - `apps/web` 도 이때 편입 검토 (nginx 서비스 or S3/CloudFront). v2 범위엔 미포함.
-   - 이미지 슬림화(api ~1.3GB), OpenAI 키/JWT 를 AWS Secrets Manager 로.
+4. ~~루트 `docker-compose.yml`~~ — 완료 (PR #8, 태그 `v2-compose`).
+5. **AWS 배포**:
+   - ~~준비(A~F): digest 핀·web/Caddy 편입·dev/prod compose 분리·SSM 스크립트·DEPLOY.md·Terraform~~
+     — 완료 (PR #10). `apps/web` 는 nginx 대신 **Caddy** 로 편입(자동 HTTPS). 시크릿은
+     Secrets Manager 대신 **SSM Parameter Store**(무료). 이미지 슬림화는 후순위로 유지.
+   - **남음**: `docs/DEPLOY.md` 순서대로 실제 실행 — Budgets 알림 → ECR push(buildx linux/amd64)
+     → `seed-secrets.sh` → `terraform apply` → DuckDNS → SSH 배포 → HTTPS 스크린샷 → `terraform destroy`.
+     한 세션(~2시간)에 집중, 비용 며칠 $2~5 + 당일 teardown. 끝나면 `v3-aws` 태그 + 이 문서에 결과 append.
+   - 로컬 검증 완료: 4개 서비스 기동·로그인·RAG+GPT 추천·카톡 업로드→임베딩(19,415행, 768차원 확인).
+     시연 영상 + DB/임베딩 스크린샷 확보.
 
 **미결 / 나중에**
 - `npm audit`: `apps/api` 에 취약점 51개(critical 2) — 8개월 된 의존성 트리의 transitive. 로컬 개발 단계라 급하지 않음.
@@ -233,10 +239,68 @@
 - **미실시**: JWT 로그인 후 `/llm/generate` full e2e (데이터 보유 유저 비밀번호 없음 — 임베딩/DB/OpenAI
   링크는 각각 위에서 개별 검증됨).
 
-### v3-aws(5번) 로 넘길 것
-- `apps/web` 편입(nginx 서비스 or S3/CloudFront).
-- 시크릿을 AWS Secrets Manager 로. api 이미지 슬림화(~1.3GB).
-- 옛 볼륨 `likeme-like-me-api_postgres_data` 정리.
+### v3-aws(5번) 로 넘긴 것 → 아래 "v3-aws 배포 준비" 섹션에서 대부분 처리
+- ~~`apps/web` 편입~~ → Caddy 컨테이너로 편입 (S3/CloudFront 아님).
+- ~~시크릿 외부화~~ → Secrets Manager 대신 SSM Parameter Store.
+- api 이미지 슬림화(~1.3GB) — 아직 후순위로 유지.
+- 옛 볼륨 `likeme-like-me-api_postgres_data` 정리 — 아직 안 함.
+
+---
+
+## v3-aws 배포 준비 (2026-09-09, `refactor/aws-deploy` → `main` PR #10)
+
+> 로드맵 5번의 "준비" 단계. AWS 에 비용을 들이기 전에, 배포를 코드/문서로 완전히
+> 재현 가능하게 만들어 둔다. 실제 실행(ECR push → terraform apply → 배포 → teardown)은
+> `docs/DEPLOY.md` 를 따라 한 세션에 몰아서 하고, 그 결과를 이 섹션에 append 한다.
+
+### 타깃 아키텍처
+
+단일 EC2(t3.small) 위에서 `docker compose -f docker-compose.yml -f docker-compose.prod.yml`.
+관리형 서비스(RDS·ALB·ECS) 없음 = 최저 비용 + `terraform destroy` 한 번으로 상시 비용 0.
+
+```
+인터넷 :80/:443 → EC2(SG: 22 내 IP, 80, 443)
+  docker compose: web(Caddy) → api(Nest) → { embedding, db(pgvector) }
+  ECR (api/web/embedding pull) · SSM Parameter Store (시크릿) · OpenAI (outbound)
+```
+
+RAG·GPT 는 AWS 상품 선택에 영향 없음 (pgvector 는 같은 컨테이너, GPT 는 outbound HTTPS).
+비용을 좌우하는 건 embedding 컨테이너(torch, 상주 RAM ~1.5GB) → free tier micro 불가, 2GB + swap.
+
+### As-Is → 문제 인식 → To-Be (작업 A~F)
+
+| # | As-Is | 문제 인식 | To-Be |
+|---|---|---|---|
+| A | Dockerfile `FROM node:24-bookworm-slim` 등 태그만. GPT 모델명 `'gpt-4o-mini'` 코드 하드코딩 | 몇 달 뒤 재배포 시 다른 이미지가 되거나 모델 retire 시 코드 수정 필요 | 베이스 이미지 3개를 `태그@sha256`(멀티아치 인덱스 digest) 로 핀. `OPENAI_MODEL` env + Joi 기본값 |
+| B | 프론트가 `http://localhost:3000` 을 6곳에 하드코딩 (`.env` 의 `VITE_API_BASE_URL` 은 미사용) | 배포하면 프론트가 로컬 주소를 찾음. 별 포트 2개(5173/3000) 노출 | `src/config.js` 단일 출처. prod `.env.production` 은 빈 값=상대경로. **Caddy** 컨테이너가 SPA 서빙 + `/auth /llm /telegram /relationships /kakao /test-db` → api 프록시 + Let's Encrypt 자동 HTTPS (`SITE_ADDRESS` env: `:80` 평문 / 도메인) |
+| C | compose 1개, `db`·`api` 포트가 항상 호스트에 노출 | prod 에서 DB·API 가 인터넷에 노출 | `docker-compose.yml`(내부 전용) + `docker-compose.override.yml`(dev 자동, 포트 재노출) + `docker-compose.prod.yml`(`-f` 명시, `build: !reset`, `image: ${ECR_REGISTRY}/…:${IMAGE_TAG}`, `pull_policy: always`). prod 는 web 80/443 만 노출 |
+| D | 시크릿이 `.env` 파일·compose `environment` 의존 | 이미지·저장소·AMI 어디에도 시크릿을 두면 안 됨 | `scripts/seed-secrets.sh`(노트북: 로컬 env → SSM, 비밀은 SecureString) + `scripts/fetch-secrets.sh`(EC2: IAM 인스턴스 프로파일로 `/likemelikeme/prod/` 읽어 `.env` 생성, chmod 600) |
+| E | 배포 절차가 머릿속에만 | 몇 달 뒤 재배포 시 재현 불가 | `docs/DEPLOY.md` — 아키텍처 다이어그램 + 9절(사전준비 → ECR → SSM → Terraform → EC2 배포 → 검증 → 재배포 → teardown → 트러블슈팅). `📸` 스크린샷 지점, `TODO(값)` 채울 자리 |
+| F | 인프라를 콘솔에서 클릭 | 재현·철거가 수동, 실수 여지 | `infra/` 최소 Terraform: default VPC + SG(22 내 IP·80·443) + IAM 인스턴스 프로파일(SSM read `${prefix}/*` + `kms:Decrypt` via ssm + ECR pull 지정 리포만) + EC2(AL2023 x86, gp3 30GB 암호화, IMDSv2) + EIP. `user-data.sh`: docker + compose v2 + 2GB swap |
+
+부수 수정: `.gitattributes` 에 `Caddyfile`·`*.tf`·`*.hcl` `eol=lf` 추가.
+별도 브랜치 `fix/chat-hamburger-toggle`(PR #9): 채팅 대화목록 열림 시 ☰ 숨김.
+
+### 검증 (로컬, AWS 비용 0)
+
+- `docker compose up --build` → db·embedding·api·**web** 4개 healthy.
+- `http://localhost/test-db` → `{users:2, partners:21, relationships:18}` (Caddy → api 프록시 정상).
+- `http://localhost` → SPA 로드, 로그인 성공 → **same-origin 라우팅**(상대경로 `/auth/login` 이 Caddy 통과) 검증.
+- 채팅 → RAG + GPT 추천 답변 생성 end-to-end (`/llm` + SSE `/telegram/events` 통과).
+- 카톡 `.txt` 업로드 → `tone_samples` **17,943 → 19,415행**(약 1,472 추가), 자동 임베딩으로 `embedding IS NULL` = 0,
+  `vector_dims` = **768**, 실제 float 값 확인. 새 Partner "명지 명준이 형" 생성.
+  (참고: `created_at` 은 UTC 저장 — 로컬 KST 와 9시간차. 시간 필터 시 주의.)
+- `docker compose config` 로 dev/prod 두 병합 검증 (prod 는 web 80/443 외 노출 0, `!reset` 로 `build:` 제거됨).
+- **미실시(비용 발생 구간)**: 실제 `terraform apply`, ECR push, EC2 배포, Let's Encrypt 발급, `terraform destroy`.
+  `terraform` CLI 미설치 → `terraform validate` 도 실행 세션에서.
+
+### 실제 실행 시 유의 (DEPLOY.md 로 이관)
+
+- `docker buildx build --platform linux/amd64` (EC2 x86). arm64(t4g) 로 가려면 이미지 재빌드.
+- EC2 키페어를 먼저 생성/임포트하고 `key_name` 전달.
+- private 레포라 user-data 에서 clone 불가 → SSH 로 수동 clone 또는 compose 파일만 복사.
+- 텔레그램 봇이 webhook 모드면 `https://<도메인>/telegram/...` 로 setWebhook.
+- teardown 시 **EIP release** 확인 (미연결 EIP 는 시간당 과금). ECR·SSM 은 스택 밖 — SSM 무료, ECR 은 수동 삭제.
 
 ---
 
