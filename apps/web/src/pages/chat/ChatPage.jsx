@@ -323,13 +323,17 @@ const ChatPage = () => {
       <Header />
 
       <div className={styles.chatLayout}>
-        {/* 햄버거 메뉴 버튼 (작은 화면에서만 표시) */}
-        <button
-          className={styles.hamburgerButton}
-          onClick={() => setShowConversationList(!showConversationList)}
-        >
-          ☰
-        </button>
+        {/* 햄버거 메뉴 버튼 (작은 화면에서만 표시).
+            대화 목록이 열려 있으면 목록 헤더의 ✕ 버튼이 닫기를 담당하므로 숨긴다. */}
+        {!showConversationList && (
+          <button
+            className={styles.hamburgerButton}
+            onClick={() => setShowConversationList(true)}
+            aria-label="대화 목록 열기"
+          >
+            ☰
+          </button>
+        )}
 
         {/* 왼쪽: 대화 목록 (30%) */}
         <div className={`${styles.conversationList} ${showConversationList ? styles.conversationListMobileShow : ''}`}>
