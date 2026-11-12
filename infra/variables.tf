@@ -16,8 +16,9 @@ variable "key_name" {
 }
 
 variable "my_ip" {
-  description = "SSH(22) 를 허용할 내 공인 IP. CIDR 표기 (예: 1.2.3.4/32)"
+  description = "비상용 SSH(22) 를 허용할 내 공인 IP (CIDR, 예: 1.2.3.4/32). 비워 두면(기본) 22번 규칙이 아예 없고 SSM Session Manager 로만 접속한다."
   type        = string
+  default     = ""
 }
 
 variable "ssm_prefix" {

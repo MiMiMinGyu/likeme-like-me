@@ -11,3 +11,6 @@ override.tf.json
 *_override.tf
 *_override.tf.json
 # .terraform.lock.hcl 은 커밋한다 (provider 버전 고정)
+# terraform plan -out 산출물 (리소스 값이 들어갈 수 있어 커밋 금지)
+tfplan
+tfplan.*

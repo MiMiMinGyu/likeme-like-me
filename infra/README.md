@@ -8,8 +8,8 @@
 
 | 리소스 | 비고 |
 |---|---|
-| Security Group | 22(내 IP만), 80, 443, 아웃바운드 전체 |
-| IAM Role + Instance Profile | SSM 읽기(`${ssm_prefix}/*`) + KMS Decrypt(SSM 경유) + ECR pull(지정 리포만) |
+| Security Group | 80, 443, 아웃바운드 전체. **22번은 `my_ip` 를 줄 때만 열린다(비상용), 기본은 닫힘** |
+| IAM Role + Instance Profile | SSM 읽기(`${ssm_prefix}/*`) + KMS Decrypt(SSM 경유) + ECR pull(지정 리포만) + Session Manager 용 관리형 `AmazonSSMManagedInstanceCore` |
 | EC2 (t3.small, AL2023, gp3 30GB, IMDSv2) | user-data 로 docker/compose/스왑 설치 |
 | Elastic IP | 도메인 A 레코드용 고정 IP |
 
@@ -17,8 +17,13 @@ default VPC/서브넷을 그대로 쓴다 (별도 네트워크 없음).
 
 ## 사전 준비
 
-- AWS CLI 프로파일 (IAM 사용자, `ap-northeast-2`)
-- EC2 **키페어**를 미리 생성/임포트 → 이름을 `key_name` 으로 전달
+- AWS CLI 프로파일 (IAM 사용자, `ap-northeast-2`). `aws login` 을 쓰면 Terraform 이 그 자격을 읽지 못하므로
+  실행 전에 임시 자격을 내보낸다 (PowerShell):
+  ```powershell
+  aws configure export-credentials --profile <프로파일> --format powershell | Invoke-Expression
+  ```
+- PC 에 `session-manager-plugin` (`aws ssm start-session` 용)
+- EC2 **키페어**를 미리 생성/임포트 → 이름을 `key_name` 으로 전달 (인스턴스에 연결되는 값이라 바꾸면 서버가 교체된다)
   ```sh
   aws ec2 create-key-pair --key-name likemelikeme \
     --query KeyMaterial --output text > ~/.ssh/likemelikeme.pem
@@ -35,16 +40,28 @@ terraform init
 
 cat > terraform.tfvars <<EOF
 key_name = "likemelikeme"
+# my_ip  : 비상용 SSH(22) 를 허용할 내 공인 IP. 비우면(기본) 22번 규칙이 없다.
 my_ip    = "$(curl -s https://checkip.amazonaws.com)/32"
 EOF
 
 terraform apply
-# outputs: public_ip, ssh, ssm_prefix
+# outputs: public_ip, instance_id, ssh, ssm_session, ssm_prefix
 
 terraform output -raw public_ip     # → DuckDNS/도메인 A 레코드에 입력
 ```
 
 이후 배포는 `docs/DEPLOY.md` 5절.
+
+### 22번을 닫는 순서 (잠금 방지)
+
+1. `my_ip` 를 둔 채로 apply → SSM 권한이 붙고, 서버의 SSM 에이전트가 Online 이 된다.
+   `aws ssm describe-instance-information` 에 나오고 `aws ssm start-session --target <instance_id>` 가 되는지 확인.
+2. 그다음 `my_ip = ""` 로 apply → SG 의 22번 규칙만 제거된다 (`0 to add, 1 to change`).
+   이 순서를 어기면 접속 수단이 사라질 수 있다.
+
+참고: AL2023 **minimal** AMI 에는 SSM 에이전트가 없다. `user-data.sh` 가 설치하지만 user-data 는 최초 부팅 1회라,
+이미 떠 있는 서버에는 수동 설치(`dnf install amazon-ssm-agent`)가 필요하다. 권한이 붙기 **전에** 에이전트가
+시작되면 재시도를 약 28분 뒤로 미루므로, 권한 부여 후 `systemctl restart amazon-ssm-agent`.
 
 ## 철거
 
@@ -76,4 +93,7 @@ kms:Decrypt
 ecr:GetAuthorizationToken            └ *  (AWS 사양상 리소스 한정 불가)
 ecr:BatchGetImage / GetDownloadUrlForLayer / BatchCheckLayerAvailability
   └ repository/likeme-api, likeme-web, likeme-embedding
+AmazonSSMManagedInstanceCore (AWS 관리형)
+  └ Session Manager / Run Command 용. 에이전트가 요구하는 액션을 직접 줄이면 등록이 조용히 실패할 수
+    있어 관리형을 선택했다. 사용자 정의 최소 정책은 후속 과제.
 ```

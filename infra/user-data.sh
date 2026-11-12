@@ -20,6 +20,11 @@ curl -sSL "https://github.com/docker/compose/releases/download/$${COMPOSE_VERSIO
   -o "$CLI_PLUGINS/docker-compose"
 chmod +x "$CLI_PLUGINS/docker-compose"
 
+# --- SSM 에이전트 (Session Manager / Run Command) ---
+# AL2023 minimal AMI 에는 에이전트가 없다. 설치하지 않으면 22번을 닫은 뒤 접속할 방법이 없다.
+dnf -y install amazon-ssm-agent
+systemctl enable --now amazon-ssm-agent
+
 # --- 스왑 ---
 if [ ! -f /swapfile ]; then
   dd if=/dev/zero of=/swapfile bs=1M count=$(( ${swap_gb} * 1024 ))

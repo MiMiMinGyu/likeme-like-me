@@ -37,19 +37,25 @@ data "aws_ami" "al2023" {
 
 # ------------------------------------------------------------------ 보안 그룹
 resource "aws_security_group" "app" {
-  name        = "likemelikeme-app"
-  description = "SSH(내 IP), HTTP, HTTPS"
+  name = "likemelikeme-app"
+  # SG description 은 ASCII 만 허용 (한글·작은따옴표 불가 — plan 단계에서 거부됨)
+  description = "SSH (my IP only), HTTP, HTTPS"
   vpc_id      = data.aws_vpc.default.id
 
-  ingress {
-    description = "SSH (내 IP 만)"
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = [var.my_ip]
+  # SSH 는 비상용(break-glass): my_ip 가 비어 있으면 22번 규칙 자체가 없다.
+  # 평상시 접속은 SSM Session Manager (aws ssm start-session) 로 한다.
+  dynamic "ingress" {
+    for_each = var.my_ip == "" ? [] : [var.my_ip]
+    content {
+      description = "SSH (my IP only)"
+      from_port   = 22
+      to_port     = 22
+      protocol    = "tcp"
+      cidr_blocks = [ingress.value]
+    }
   }
   ingress {
-    description = "HTTP (Caddy — Let's Encrypt HTTP-01 포함)"
+    description = "HTTP (Caddy, incl. Lets Encrypt HTTP-01 challenge)"
     from_port   = 80
     to_port     = 80
     protocol    = "tcp"
@@ -63,7 +69,7 @@ resource "aws_security_group" "app" {
     cidr_blocks = ["0.0.0.0/0"]
   }
   egress {
-    description = "전체 아웃바운드 (ECR·SSM·OpenAI·Let's Encrypt)"
+    description = "All outbound (ECR, SSM, OpenAI, Lets Encrypt)"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
@@ -132,6 +138,14 @@ resource "aws_iam_role_policy" "app" {
   policy = data.aws_iam_policy_document.app.json
 }
 
+# Session Manager / Run Command 용 AWS 관리형 정책.
+# 직접 만든 최소 정책 대신 관리형을 쓴 이유: 에이전트가 요구하는 ssm·ssmmessages·ec2messages
+# 액션 목록을 임의로 줄이면 에이전트 등록이 조용히 실패할 수 있다. (사용자 정의 최소 정책은 후속 과제)
+resource "aws_iam_role_policy_attachment" "ssm_core" {
+  role       = aws_iam_role.app.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+}
+
 resource "aws_iam_instance_profile" "app" {
   name = "likemelikeme-ec2"
   role = aws_iam_role.app.name
@@ -161,6 +175,12 @@ resource "aws_instance" "app" {
   }
 
   tags = { Name = "likemelikeme" }
+
+  # user-data 는 최초 부팅 1회용 스크립트다. 내용이 바뀌어도 실행 중인 서버를 stop/start 하지
+  # 않도록 변경을 무시한다 (새 인스턴스를 만들 때만 새 스크립트가 적용된다).
+  lifecycle {
+    ignore_changes = [user_data]
+  }
 }
 
 resource "aws_eip" "app" {
