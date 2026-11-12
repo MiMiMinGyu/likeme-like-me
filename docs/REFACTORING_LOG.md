@@ -54,7 +54,8 @@
 
 ### 다음 세션 시작점 (2026-09-09~)
 
-**로드맵 1·2·3·4번 완료. 5번(AWS 배포)은 "준비"까지 완료, "실제 실행"만 남음.**
+**로드맵 1~5번 완료 (2026-11-12 실제 배포 + 증거 수집). 남은 것은 `terraform destroy`·IAM 정리·포트폴리오 글.**
+상세는 아래 "## v3-aws 실제 배포 실행" 섹션과 `docs/evidence/`(스크린샷 목록). 아래 "다음 할 일" 5번은 이전 기록이다.
 준비 작업(A~F)은 `refactor/aws-deploy` → `main` 병합 (PR #10 `af4ef91`).
 아래 "## v3-aws 배포 준비" 섹션 참고. `v3-aws` 태그는 실제 배포·검증 후에 단다.
 
@@ -301,6 +302,88 @@ RAG·GPT 는 AWS 상품 선택에 영향 없음 (pgvector 는 같은 컨테이�
 - private 레포라 user-data 에서 clone 불가 → SSH 로 수동 clone 또는 compose 파일만 복사.
 - 텔레그램 봇이 webhook 모드면 `https://<도메인>/telegram/...` 로 setWebhook.
 - teardown 시 **EIP release** 확인 (미연결 EIP 는 시간당 과금). ECR·SSM 은 스택 밖 — SSM 무료, ECR 은 수동 삭제.
+
+---
+
+## v3-aws 실제 배포 실행 (2026-11-12, 서울)
+
+> "준비"(위 섹션)를 실제로 실행하고 증거를 남긴 기록. 스크린샷은 `docs/evidence/README.md` 에 번호별로 정리.
+> **범위 선언**: 이번 배포의 목적은 "클라우드에서 파이프라인이 끝까지 도는가"의 검증이다.
+> 말투 재현 품질(파인튜닝 실패 후 RAG + GPT API 로 전환한 결과)은 평가 대상이 아니다.
+
+### 결과
+
+- 단일 EC2(t3.small) + `docker compose`(web/Caddy · api · embedding · db) + Let's Encrypt HTTPS(DuckDNS 도메인).
+- 시크릿은 이미지·저장소 어디에도 없이 SSM Parameter Store → EC2 `.env`(chmod 600).
+- 웹 → Caddy → api → 임베딩 서비스 → pgvector → OpenAI(아웃바운드) 전 경로 동작. AI 추천 응답 ≈ 1.7초(DevTools, `201`), 재기동 직후 첫 호출 ≈ 4.6초.
+- 메모리: 전체 698Mi / 1.9Gi, swap 사용 3MiB. embedding 컨테이너가 318.5MiB 로 최대.
+- 데모 데이터: **가상** 상대 7명·가상 수신 메시지 7개 + 말투 샘플 600행(본인 발화 일부).
+  샘플은 전화번호·이메일·URL·긴 숫자·시스템 문구·상대 이름이 든 행을 규칙으로 제외하고 카테고리별로 추렸으며,
+  본인이 전체를 검토했다. **일부 이름·비속어가 남아 있음을 확인한 상태로 승인**했고 서버는 임시(teardown)다.
+  상대 대화 원본·이름 목록은 올리지 않았다. 텔레그램은 비활성(SSM 에서 토큰 삭제).
+- 비용: t3.small 시간당 약 $0.03 + EIP·EBS·ECR 소액, 당일 teardown 이 원칙. 실제 청구액은 Cost Explorer 확인 후 여기에 append.
+
+### 트러블슈팅 (증상 → 원인 → 해결)
+
+| # | 증상 | 원인 | 해결 |
+|---|---|---|---|
+| 1 | `terraform plan` 이 SG description 을 거부 | SG description 은 ASCII 만 허용(한글·`'` 불가) | 설명을 영문 ASCII 로. plan 단계에서 잡혀 배포 중 실패를 피함 |
+| 2 | Git Bash 에서 SSM 시크릿 등록이 `fully qualified name` 오류 | Git Bash 가 `/likemelikeme/prod/…` 를 Windows 경로로 변환 | `MSYS_NO_PATHCONV=1` |
+| 3 | Terraform 이 `aws login` 자격을 못 읽음 | SDK 가 로그인 세션 자격 증명을 해석하지 못함 | `aws configure export-credentials --format powershell` 로 임시 자격을 환경변수에 주입. 장기 액세스 키는 비활성화 |
+| 4 | SSH 가 `Connection timed out` | SG 22번이 내 공인 IP(/32)만 허용인데 접속 네트워크 IP 가 바뀜 | 개선 A(아래) |
+| 5 | api 가 `unhealthy` 로 재시작 반복 (`P3018 column does not have dimensions`) | init 마이그레이션이 차원 없는 `vector` 를 만들고, 뒤따르는 HNSW 인덱스 마이그레이션이 차원 필수라 실패. 차원은 그 뒤 순서. 기존 DB 는 차원이 이력 밖에서 먼저 적용돼 가려져 있었음 | 서버 복구: 컬럼 차원 지정 + `migrate resolve --rolled-back`. 재발 방지는 개선 D(아래) |
+| 6 | 화면 헤더가 "관계 미설정" | Caddy `@api path /relationships/*` 는 `/relationships` 자체와 매칭되지 않아 SPA 폴백(index.html)이 200 으로 응답. 프론트 `.find()` 가 HTML 문자열에서 실패. 로컬 개발은 프론트가 `localhost:3000` 을 직접 호출해 경로 매칭이 필요 없었음 | Caddyfile 에 `/relationships` 추가, web 재빌드·재배포 |
+| 7 | 수정 후에도 일반 창에서만 "미설정" | 잘못 응답한 HTML(`Last-Modified` 오래됨 + ETag)이 브라우저 휴리스틱 캐시에 남음. 시크릿 창에선 정상 | 개선 G(아래) |
+| 8 | Windows 에서 ECR push 가 `403` | `docker login` 이 `The stub received bad data`(자격 증명 저장소가 긴 ECR 토큰 저장 실패)로 조용히 실패 | 임시 `DOCKER_CONFIG` + PATH 에서 `docker-credential-*` 를 숨겨 파일 저장으로 폴백. 임시 설정은 삭제 |
+| 9 | ECR 스캔이 `UnsupportedImageTypeException` | buildx 가 멀티 플랫폼 인덱스(+증명)로 push 해 태그가 Image Index 를 가리킴 | 인덱스의 amd64 자식 digest 로 스캔 |
+| 10 | `start-session` 이 `TargetNotConnected` | ① minimal AL2023 AMI 에는 SSM 에이전트가 없음 ② 권한 부여 전에 시작한 에이전트가 AccessDenied 후 재시도를 약 28분 뒤로 미룸 | 에이전트 설치(+`user-data.sh` 반영), 권한 부여 후 에이전트 재시작 |
+| 11 | 텔레그램을 끄면 AI 추천을 시연할 수 없음 | 웹의 "AI 추천"이 `/telegram/recommendations` 를 **DB 에 저장된 messageId** 로 호출하고, 상대 메시지를 직접 입력하는 화면이 없음 | 가상 수신 메시지를 DB 에 직접 적재 |
+
+### 개선 (As-Is → 문제 인식 → To-Be)
+
+| # | As-Is | 문제 인식 | To-Be | 결과 |
+|---|---|---|---|---|
+| A | SG 22번을 내 IP 로 제한, `.pem` 키로 SSH | 네트워크가 바뀌면 접속 불가, 키 관리 부담, 22번 노출 | SSM Session Manager(`ssm:` 권한 + 에이전트). **2단계 적용**: ① 권한 추가·에이전트 Online 확인 ② `my_ip=""` 로 22번 규칙 제거(비상용으로 남기는 옵션). 이후 배포는 `aws ssm send-command`(ec2-user 권한) | SG 인바운드 3줄 → **2줄(80/443)**, SSH 타임아웃 = 의도한 결과, `start-session` 성공. 증거 12·35~40 |
+| B | 베이스 이미지 digest 가 2026-09-09 로 고정 | 오래된 digest 라 스캔에 Critical/High 다수 | 같은 태그의 최신 digest 로 갱신(api·web). 기능 변경 없음 | 아래 표. **이미지 크기는 사실상 그대로**(슬림화가 아니라 보안 패치 갱신) |
+| D | 깨끗한 DB 에서 처음부터 마이그레이션을 재생하면 4번째에서 실패 | 로컬 DB 상태에 기대 이력 → 새 환경에서 재현 불가 | 이력은 수정하지 않고 HNSW 직전에 **멱등 마이그레이션** 추가(차원 없는 컬럼만 `vector(768)`) | 임시 DB 시험 통과: ① 깨끗한 DB 10개 전부 적용 ② 서버와 같은 복구 상태 DB 에 무변경 적용. 새 마이그레이션 없이는 `P3018` 재현 |
+| F | `GET /telegram/messages`, `POST /telegram/reply` 에 인증 가드 없음 | `/telegram/*` 가 인터넷에 공개된 배포에서 받은 메시지 조회·답장 전송이 인증 없이 가능 | `JwtAuthGuard` 추가(프론트는 토큰 포함 인스턴스로 호출해 호환) | 비로그인 `401`, 로그인 `200` |
+| G | API 오류 응답이 브라우저에 캐시돼 증상이 이어짐 | 휴리스틱 캐시 | Caddy: API `Cache-Control: no-store`, SPA 폴백 `no-cache` | 헤더 확인 |
+
+#### B: ECR 기본 스캔 (Critical / High / Medium)
+
+| 이미지 | 개선 전 | 개선 후 |
+|---|---|---|
+| api | 6 / 21 / 14 | **0 / 6 / 3** |
+| web | 21 / 45 / 8 | **1 / 0 / 0** |
+| embedding | 6 / 21 / 23 | 손대지 않음 |
+
+### 이번에 고치지 않은 것 (후속 과제)
+
+- **객체 수준 권한 검사 없음**: `/telegram/recommendations`·`/telegram/reply` 가 `messageId` 가 요청자 대화에 속하는지 확인하지 않음(F 는 가드만 추가).
+- `/test-db` 가 인증 없이 공개(레코드 수 노출), `/telegram/status` 는 봇이 꺼져도 "running" 고정 응답.
+- SSE `/telegram/events?token=` 이 JWT 를 쿼리스트링으로 전달(주소·접속 로그에 남을 수 있음).
+- 운영 번들이 디버그 `console.log` 를 출력, 서버 로그에 사용자 메시지 본문·생성 답변이 평문으로 남음(로그 위생).
+- 가입이 개방돼 있어 공개 상태에서 누구나 가입·OpenAI 호출 가능(선불 크레딧·자동충전 OFF 로 피해 상한만 둠).
+- SSM 권한은 AWS 관리형 `AmazonSSMManagedInstanceCore`(에이전트 요구 액션을 임의로 줄이면 등록이 조용히 실패할 수 있어 선택). 사용자 정의 최소 정책은 후속.
+- 스캔 잔여: api High 6은 **베이스 이미지의 OS 패키지**(util-linux·glibc·zlib)다. 개선 전 Critical 6건은 perl·openssl 이었고
+  베이스 digest 갱신으로 사라졌다. 남은 건 이미지 안에서 패키지를 업그레이드하거나 베이스를 바꿔야 줄어든다(후속).
+  web 에 남은 Critical 1은 CVE-2026-4738(zlib 1.3.2-r1)이다. 개선 전에도 같은 CVE 가 있었고(zlib 1.3.2-r0), 설명이 gdal 의
+  zlib contrib(infback9) 모듈 문제라 **스캐너가 패키지 이름으로 매칭한 오탐일 가능성**이 있다(확정 아님 — 공식 권고 확인 필요).
+  web 개선 전 Critical 21건은 curl(libcurl 8.19.0-r0)·brotli·zlib 이었다. embedding 은 미개선.
+- `docker login` 평문 저장 경고(ECR credential helper 로 대체 가능), Terraform state 로컬, ECR·SSM 은 스택 밖.
+
+### 운영 환경이라면 (면접 대비)
+
+- **임베딩 증가**: 768차원 float32 한 행 ≈ 3KB → 현재 19,415행 ≈ 60MB, 100만 행이면 ≈ 3GB + HNSW 인덱스. 지금 메모리는 "모델"(embedding 컨테이너 ≈ 318MiB)이 크고, 데이터가 늘면 DB 쪽이 커짐.
+  대안: `halfvec` 저장(용량 절반), 사용자·카테고리별 샘플 상한과 중복 제거, 사용자 단위 파티셔닝/필터로 검색 범위 축소, 임베딩을 수집 시점 배치로 1회 생성, DB 를 RDS/Aurora(pgvector)로 분리하고 임베딩 서비스는 독립 스케일.
+- **단일 EC2 + compose 를 고른 이유**: 임베딩 모델 메모리 때문에 Fargate/RDS 로 가면 비용이 급증하고, 단일 사용자 데모이며, 설계 깊이(RDS·망분리·최소권한·복구 드릴)는 다른 포트폴리오에서 이미 다룸. 운영이라면 RDS(백업·다중 AZ)·ALB·ECS·CloudWatch 알람으로 바꿈.
+
+### 남은 마무리
+
+- [ ] `terraform destroy` → EC2·EIP·SG·IAM 역할 삭제 확인, 다음 날 Cost Explorer $0 수렴
+- [ ] IAM: 비활성 액세스 키 삭제, `likemelikeme-deploy` 의 AdministratorAccess 회수(MFA 는 설정됨)
+- [ ] ECR·SSM 유지/삭제 결정, DuckDNS 도메인 정리
+- [ ] `v3-aws` 태그, 실제 청구액 append
 
 ---
 

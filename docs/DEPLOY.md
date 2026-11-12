@@ -216,3 +216,49 @@ cd infra && terraform destroy        # EC2 + EIP + SG + IAM 프로파일 삭제
 | 프론트에서 API 404/CORS | 프로덕션은 same-origin — CORS 무관. Caddyfile 의 `@api path` 목록에 해당 prefix 있는지 확인 |
 | embedding OOM (`Exited 137`) | t3.small(2GB)+swap 필요. `free -h` 확인, swap 없으면 생성 |
 | ECR pull 권한 오류 | 인스턴스 프로파일에 `ecr:GetAuthorizationToken` 등 + `docker login` 했는지 |
+| api 가 `P3018`/`P3009` 로 재시작 반복 | 깨끗한 DB 에서 마이그레이션 재생 실패. `20251111151850_set_vector_dimensions_before_hnsw` 가 있는 이미지(`987809f-r2` 이후)면 발생하지 않음. 이전 이미지면 아래 10절 참고 |
+| 화면이 "관계 미설정", 콘솔 `y.find is not a function` | Caddy 가 `/relationships` 를 api 로 안 보냄(수정됨) 또는 브라우저에 캐시된 이전 응답 → 시크릿 창에서 확인 / 사이트 데이터 삭제 |
+
+---
+
+## 10. 실제 실행(2026-11-12)에서 달라진 점
+
+위 1~9절은 "준비" 단계에 쓴 런북이다. 실제로 돌려 보고 바뀐 것만 정리한다. 상세 기록은 `docs/REFACTORING_LOG.md`.
+
+**자격 증명·도구 (Windows)**
+- `aws login` 사용 시 Terraform 은 그 자격을 못 읽는다 → `aws configure export-credentials --profile <p> --format powershell | Invoke-Expression`.
+- Git Bash 에서 `/likemelikeme/prod/…` 같은 인자는 경로로 변환된다 → `MSYS_NO_PATHCONV=1`.
+- Windows 에서 `docker login`(ECR)이 `The stub received bad data` 로 실패하고 push 가 `403` 이 된다 →
+  임시 `DOCKER_CONFIG`(credsStore 제거) + PATH 에서 `docker-credential-*` 가 안 보이는 환경에서 `docker.exe` 실행. 끝나면 폴더 삭제.
+- 2.3 의 buildx 결과 태그는 **Image Index** 라 ECR 기본 스캔이 거부된다. 인덱스의 `linux/amd64` 자식 digest 로 스캔한다.
+- 태그는 `<git SHA>-r<N>` 형태로 썼다(예: `987809f-r2`). api·web 만 다시 빌드한 경우 embedding 은 같은 이미지에
+  새 태그만 붙인다(`aws ecr batch-get-image` → `put-image`). `IMAGE_TAG` 는 세 이미지가 공유하므로 SSM 값 하나만 바꾸면 된다.
+
+**서버에 저장소 clone 이 필요 없다**
+- 서버에 필요한 파일은 `docker-compose.yml`, `docker-compose.prod.yml`, `scripts/fetch-secrets.sh` 셋뿐이다(compose 는 이미지를 pull 만 함).
+  GitHub 자격 증명을 서버에 두지 않는다. 최초 전달은 `scp`(22번이 열려 있을 때)로 했다.
+
+**접속·배포는 SSH 대신 SSM**
+- 22번은 기본으로 닫는다(`my_ip=""`). 순서와 에이전트 주의점은 `infra/README.md`.
+- 원격 실행은 `aws ssm send-command --document-name AWS-RunShellScript`. **root 로 실행**되므로, `.env` 소유권이 root 로
+  바뀌지 않게 `sudo -u ec2-user -H bash` 로 감싼다. 스크립트가 길면 base64 로 전달한다.
+  ```sh
+  # 재배포 (IMAGE_TAG 를 SSM 에서 바꾼 뒤)
+  fetch-secrets.sh → ECR 로그인 → docker compose … up -d --pull always → ps
+  ```
+
+**데이터**
+- 서버 DB 는 비어서 시작한다. 데모는 **가상 상대·가상 메시지 + 규칙으로 걸러낸 말투 샘플**을 `psql \copy` 로 적재했다
+  (사용자 계정은 웹에서 가입 → 스크립트가 그 사용자에 연결, 재실행 가능). 실제 대화 원본은 올리지 않는다.
+- 텔레그램을 쓰지 않으면 SSM 의 `TELEGRAM_BOT_TOKEN`·`DEFAULT_USER_ID` 를 삭제하고 `fetch-secrets.sh` → api 재생성
+  (둘 다 비어 있으면 봇만 비활성으로 부팅). 단, 웹의 "AI 추천"은 DB 에 저장된 수신 메시지가 있어야 동작한다.
+
+**api 가 `P3018` 로 죽을 때(이전 이미지)**: 컬럼 차원 지정 후 실패 기록 해제.
+```sh
+docker exec chatbot_db psql -U admin -d chatbot_db -c "ALTER TABLE tone_samples ALTER COLUMN embedding TYPE vector(768); \
+  ALTER TABLE knowledge_chunks ALTER COLUMN embedding TYPE vector(768); ALTER TABLE message_embeddings ALTER COLUMN embedding TYPE vector(768);"
+docker compose … run --rm --no-deps --entrypoint ./node_modules/.bin/prisma api migrate resolve --rolled-back 20251111151900_add_hnsw_indexes_on_vectors
+```
+
+**Teardown 체크리스트(추가분)**: `terraform destroy` 후 ① EC2·EIP·SG·IAM 역할 없음 확인 ② IAM 사용자 액세스 키 삭제·관리자 권한 회수
+③ ECR·SSM 유지/삭제 결정 ④ DuckDNS 도메인 정리 ⑤ 다음 날 Cost Explorer.
