@@ -11,13 +11,22 @@
 
 	# --- API 라우트: NestJS 컨트롤러 prefix 목록과 일치시킬 것 ---
 	#   auth / llm / telegram / relationships / kakao (+ 데모 확인용 /test-db)
-	@api path /auth/* /llm/* /telegram/* /relationships/* /kakao/* /test-db
+	#   주의: Caddy 의 `/x/*` 는 `/x` 자체와 매칭되지 않는다. 컨트롤러 루트 경로를 그대로
+	#   쓰는 엔드포인트(GET/POST /relationships)는 `/relationships` 를 따로 적어야 한다.
+	#   빠뜨리면 SPA 폴백(index.html)이 200 으로 응답해 화면에서 "관계 미설정"으로 보인다.
+	@api path /auth/* /llm/* /telegram/* /relationships /relationships/* /kakao/* /test-db
 	handle @api {
+		# API 응답은 브라우저/중간 캐시에 남기지 않는다. (과거에 잘못 응답한 HTML 이 휴리스틱
+		# 캐시에 남아 수정 후에도 일반 창에서 증상이 이어졌다.)
+		header Cache-Control "no-store"
 		reverse_proxy api:3000
 	}
 
 	# --- 그 외 전부: SPA 정적 파일, 클라이언트 라우팅은 index.html 로 폴백 ---
 	handle {
+		# 매 요청마다 서버에 재검증(ETag → 304). Last-Modified 만 믿고 오래된 SPA 폴백을
+		# 캐시에서 꺼내 쓰는 것을 막는다.
+		header Cache-Control "no-cache"
 		root * /srv
 		try_files {path} /index.html
 		file_server
