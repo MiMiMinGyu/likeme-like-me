@@ -58,7 +58,10 @@ export class TelegramController {
   }
 
   // 받은 메시지 목록 조회 API (인메모리)
+  // 인증 필수: 가드가 없으면 /telegram/* 가 인터넷에 공개된 배포에서 누구나 받은 메시지를 조회할 수 있었다.
   @Get('messages')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
   @ApiOperation({ summary: '받은 메시지 목록 조회 (인메모리)' })
   @ApiResponse({ status: 200, description: '받은 메시지 목록' })
   getReceivedMessages() {
@@ -128,7 +131,11 @@ export class TelegramController {
   }
 
   // 사용자 선택 답변 전송 API
+  // 인증 필수: 가드가 없으면 messageId 만 알면 누구나 봇을 통해 답장을 보낼 수 있었다.
+  // (후속 과제: messageId 가 요청자의 대화에 속하는지 객체 수준 권한 검사)
   @Post('reply')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
   @ApiOperation({ summary: '사용자 선택 답변 전송' })
   @ApiResponse({ status: 200, description: '답변 전송 성공' })
   @ApiResponse({ status: 404, description: '메시지를 찾을 수 없음' })
