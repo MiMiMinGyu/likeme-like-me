@@ -9,8 +9,8 @@
 # ------------------------------------------------------------------ build stage
 # 베이스 이미지는 digest 로 고정 (api Dockerfile 과 동일 정책). 갱신:
 #   docker manifest inspect node:24-bookworm-slim
-# 고정 시각: 2026-09-09 (멀티아치 인덱스 digest)
-FROM node:24-bookworm-slim@sha256:ba849c60be29959425b8734d57b8b4b7d56f98edd9504c9af091d5281095a71e AS build
+# 고정 시각: 2026-11-12 (스캔 취약점 감소 목적으로 최신 digest 갱신; 이전: 2026-09-09)
+FROM node:24-bookworm-slim@sha256:dc26ae92c9fb15cf6b1d63e20f0944b2efe0f115b20e00be48fb23fceb061c54 AS build
 
 WORKDIR /app
 
@@ -25,7 +25,7 @@ RUN npm run build
 
 # ---------------------------------------------------------------- runtime stage
 # Caddy: 정적 파일 서버 + 자동 HTTPS. 갱신: docker manifest inspect caddy:2-alpine
-FROM caddy:2-alpine@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648
+FROM caddy:2-alpine@sha256:78bd35025c7ba85961dd149ae670315129954e77abe2383ac47c89106b35ade9
 
 COPY Caddyfile /etc/caddy/Caddyfile
 COPY --from=build /app/dist /srv
