@@ -380,10 +380,14 @@ RAG·GPT 는 AWS 상품 선택에 영향 없음 (pgvector 는 같은 컨테이�
 
 ### 남은 마무리
 
-- [ ] `terraform destroy` → EC2·EIP·SG·IAM 역할 삭제 확인, 다음 날 Cost Explorer $0 수렴
-- [ ] IAM: 비활성 액세스 키 삭제, `likemelikeme-deploy` 의 AdministratorAccess 회수(MFA 는 설정됨)
-- [ ] ECR·SSM 유지/삭제 결정, DuckDNS 도메인 정리
-- [ ] `v3-aws` 태그, 실제 청구액 append
+- [x] `terraform destroy` → 7개 삭제, AWS 에서 EC2(terminated)·EIP·EBS·SG·IAM 역할 없음 확인 (증거 45)
+- [ ] 다음 날 이후 Cost Explorer $0 수렴 확인 + 실제 청구액 append
+- [x] DuckDNS 도메인 삭제(댕글링 DNS 방지, 증거 46), SSM 파라미터 9개 삭제(계정에 0개)
+- [x] IAM: 액세스 키 삭제(증거 47, MFA 는 유지)
+- [x] IAM: `AdministratorAccess` → `AmazonEC2ContainerRegistryFullAccess` 로 교체(ECR 삭제용 최소 권한, 증거 48).
+  부작용: 이 권한에는 `signin:CreateOAuth2Token` 이 없어 **`aws login` 기반 CLI 는 토큰 갱신이 안 된다**(콘솔은 정상). ECR 삭제는 콘솔에서 한다.
+- [ ] **글 작성 후** ECR 이미지·리포지토리 3개 삭제 → 그다음 IAM 사용자의 모든 권한 정책 제거(= 마지막 작업)
+- [x] 태그: 기존 `v3-aws`(배포 준비 완료, 9/10)는 유지하고 실제 배포 시점에 `v3-aws-deployed` 추가
 
 ---
 

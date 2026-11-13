@@ -51,6 +51,10 @@
 | 42-ecr-scan-api-after.png | ECR 스캔(api, 개선 후): 중요 **0** / 높음 **6** / 보통 3 / 낮음 4, 취약성 13건. 남은 High 는 util-linux·glibc·zlib(베이스 OS 패키지) | 없음 | 개선 B "이후" 증거 (15:17 스캔). 크기는 거의 그대로 |
 | 43-ecr-scan-web-before.png | ECR 스캔(web, 개선 전): 중요 **21** / 높음 **45** / 보통 8, 취약성 74건. Critical 은 대부분 curl(libcurl 8.19.0-r0)·brotli·zlib | 없음 | 개선 B "이전" 증거 (10:39 스캔) |
 | 44-ecr-scan-web-after.png | ECR 스캔(web, 개선 후): 중요 **1**, 나머지 0. 남은 1건은 CVE-2026-4738(zlib 1.3.2-r1) | 없음 | 개선 B "이후" 증거 (15:17 스캔). 같은 CVE 가 개선 전에도 있었고 설명이 gdal(zlib contrib) 제품의 문제라 스캐너의 패키지명 매칭에 의한 오탐일 가능성이 있음(미확정) |
+| 45-terraform-destroy-complete.png | `terraform destroy`: 역할 정책 연결·인라인 정책·EIP·인스턴스·인스턴스 프로파일·SG·IAM 역할을 순서대로 삭제, `Destroy complete! Resources: 7 destroyed.` | 없음 (계정 ID 없음, 인스턴스·EIP ID는 삭제된 임시 값) | 의존 순서대로 철거(EIP → 인스턴스 → 프로파일 → SG → 역할) |
+| 46-duckdns-domain-deleted.png | DuckDNS `likemelikeme.duckdns.org deleted`, 도메인 0/5 | 없음 (토큰·IP 없음) | 반환된 EIP 를 가리키는 댕글링 DNS 를 막기 위해 철거 직후 삭제 |
+| 47-iam-access-key-deleted.png | IAM 사용자 보안 자격 증명: "액세스 키가 삭제됨", **액세스 키 (0)**, MFA(패스키 및 보안 키) 1개 유지 | 식별자 칸 전체(ARN 의 계정 ID·MFA 디바이스 식별자) 검은 박스 | **02번(키 Inactive)과 짝**인 보안 정리 "이후" 증거. 장기 키 없이 MFA 로만 접근 |
+| 48-iam-permissions-ecr-only.png | IAM 사용자 권한 정책 (1): `AmazonEC2ContainerRegistryFullAccess`(AWS 관리형, 직접 연결) 하나만 남음 | 없음 (계정 ID·ARN 없음) | AdministratorAccess 를 ECR 전용 최소 권한으로 교체한 "이후" 증거. ECR 삭제 후 이 정책도 제거 예정 |
 | 34-browser-network-relationships-recommendations.png | 수정 후 DevTools: `relationships` **304**(ETag 재검증), `recommendations` **201 / 1.73s**, 콘솔에 요청·응답 로그 | 없음 (JWT는 표준 헤더 접두어만 보임) | RAG+GPT 응답 시간 증거. 노출 주의: `events?token=` URL에 JWT가 쿼리스트링으로 실림(앱 설계상 한계), 운영 번들이 디버그 로그를 출력 |
 
 ## 주의
