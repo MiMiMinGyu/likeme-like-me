@@ -371,6 +371,7 @@ RAG·GPT 는 AWS 상품 선택에 영향 없음 (pgvector 는 같은 컨테이�
   zlib contrib(infback9) 모듈 문제라 **스캐너가 패키지 이름으로 매칭한 오탐일 가능성**이 있다(확정 아님 — 공식 권고 확인 필요).
   web 개선 전 Critical 21건은 curl(libcurl 8.19.0-r0)·brotli·zlib 이었다. embedding 은 미개선.
 - `docker login` 평문 저장 경고(ECR credential helper 로 대체 가능), Terraform state 로컬, ECR·SSM 은 스택 밖.
+- **CI 부재**: 빈 DB 에서 마이그레이션 이력을 처음부터 적용해 보는 확인을 자동으로 돌려 주는 CI 가 없다. P3018 재발 방지 검증도 임시 DB 로 손으로 했다. CI 설계·활용은 후속 과제.
 
 ### 운영 환경이라면 (면접 대비)
 
