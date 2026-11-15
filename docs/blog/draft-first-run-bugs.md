@@ -13,10 +13,7 @@
 
 ## 배경
 
-LikemeLikeMe는 대학교 3학년 때 캡스톤디자인2 수업에서 팀원들과 함께 만든 AI 서비스다.
-사용자의 말투와 대화 패턴, 지금까지 이어진 대화 맥락을 참고하여, 사용자가 할 법한 답장을 만들어 주고 클릭 한 번으로 전송까지 하는 것이 목표였다.
-
-초기 기획은 사용자가 직접 답장을 할 수 없는 상황에서 받은 메시지에 대해 내 말투에 기반한 답장 후보를 만들어 주는 것이었다. 그 기획이 어떻게 흘러갔는지는 [README](../../README.md)에 적어 두었다.
+LikemeLikeMe는 캡스톤디자인2 수업에서 팀원들과 만든, 사용자의 말투를 참고해 답장을 만들어 주는 AI 서비스다. 프로젝트 소개는 [README](../../README.md)에 기록해 두었다.
 
 캡스톤이 끝난 뒤 이 프로젝트를 혼자 다시 열었다. 이번 목표는 말투 성능이 아니라, 이 서비스를 실제로 서버에 올려서 돌아가는 상태로 만드는 것이었다. 순서는 Docker로 묶고, Docker Compose로 여러 컨테이너를 엮은 뒤 AWS에 올리는 것이었다.
 
@@ -82,7 +79,7 @@ ERROR: column does not have dimensions
 
 하지만 서버만 고치면 같은 문제가 남는다고 생각했다. 새 환경에서 이력을 처음부터 적용하면 같은 자리에서 또 실패할 것이었다. 그래서 이력 자체를 고치기로 했다.
 
-다만 이력을 손보는 것과 이미 적용된 마이그레이션 파일을 고치는 것은 별개의 일이었다. 이미 적용된 파일은 수정하지 않았다. Prisma는 적용된 마이그레이션의 체크섬을 `_prisma_migrations` 테이블에 저장해 두고, 파일이 바뀌면 경고한다. Prisma 문서는 이미 적용된 마이그레이션을 고치거나 지우지 않는 것이 일반적이라고 설명한다([Prisma 문서](https://www.prisma.io/docs/orm/prisma-migrate/understanding-prisma-migrate/migration-histories)). 로컬 DB에는 네 번째 마이그레이션이 이미 적용된 상태일 가능성이 높아서, 그 파일을 고치면 로컬 쪽에서 경고가 날 수 있다고 추정했다.
+다만 이력을 손보는 것과 이미 적용된 마이그레이션 파일을 고치는 것은 별개의 일이었다. 이미 적용된 파일은 수정하지 않았다. Prisma는 `_prisma_migrations` 테이블의 `checksum` 값으로 적용된 마이그레이션 파일이 바뀌었는지 확인한다([shadow database 문서](https://www.prisma.io/docs/orm/prisma-migrate/workflows/shadow-database)). 또 Prisma 문서는 이미 적용된 마이그레이션을 고치거나 지우지 않는 것이 일반적이라고 설명한다([migration histories 문서](https://www.prisma.io/docs/orm/prisma-migrate/understanding-prisma-migrate/migration-histories)). 로컬 DB에는 네 번째 마이그레이션이 이미 적용된 상태일 가능성이 높아서, 그 파일을 고치면 로컬 쪽에서 변경으로 감지될 수 있다고 추정했다.
 
 대신 HNSW 인덱스를 만드는 마이그레이션 바로 앞(`20251111151850`)에 새 마이그레이션을 끼워 넣었다. 차원이 없는 컬럼만 `vector(768)`로 바꾸고, 이미 차원이 있는 DB에서는 아무것도 하지 않게 만들었다. 차원이 없는지는 컬럼 정보의 `atttypmod`가 `-1`인지로 구분했다.
 
