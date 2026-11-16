@@ -1,15 +1,5 @@
 # [LikemeLikeMe] 확인하지 않은 화면에서 터진 버그 - Caddy 라우팅과 브라우저 캐시
 
-<!--
-작성 규칙 (완성 후 이 주석 블록은 삭제)
-- 이 파일은 글 B(Caddy 라우팅 → 고친 뒤 남은 브라우저 캐시). 글 A(마이그레이션)는 draft-first-run-bugs.md.
-- 구조(레퍼런스 09 방식): H2 배경 / 문제 1 — 라우팅 / 문제 2 — 캐시 / 마무리. 소제목은 필요한 곳에만.
-- 분량 목표 약 5,000자. 문서 근거로 보강: Caddy 경로 매처 규칙, 휴리스틱 캐시, ETag/304, no-store vs no-cache.
-- 한 번에 한 섹션만 초안 → 수정 → 최종본 확정 후 다음 섹션. 문체는 글 A 와 동일(배우는 입장의 경험 서술).
-- 사용 가능한 증거: 27·28(수정 전) 30(콘솔 y.find) 31·32·33(수정 후) 34(DevTools 304/201), docs/evidence/README.md 참조.
-- 재현 사실: 옛 Caddyfile 에서 /relationships → 200(SPA 폴백), /relationships/abc → upstream 도달. 로컬 compose 도 같은 Caddyfile 이라 같은 동작.
--->
-
 ## 배경
 
 LikemeLikeMe는 캡스톤디자인2 수업에서 팀원들과 만든, 사용자의 말투를 참고해 답장을 만들어 주는 AI 서비스다. 프로젝트 소개는 [README](../../README.md)에 기록해 두었다.
