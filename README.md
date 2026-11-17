@@ -24,11 +24,22 @@
     개인 말투에 맞는 응답을 만들려 했다. 그러나 모델이 학습한 것은 말투가 아니라 대화 내용에 가까웠고, 응답의 말투는
     모델 고유의 말투에 머물렀다. FAISS·RAG 등을 시도한 끝에 완성된 GPT 모델 + RAG 구성으로 마무리했다.
   - 여기서 다루는 것은 앱의 기능이나 말투 품질이 아니라, 종료된 프로젝트를 다시 열어 리팩토링·컨테이너화·배포하며
-    얻은 것이다. 모델 선정 기준, 무엇이 문제였고 지금이라면 어떻게 했을지는 회고 글에서 정리한다.
+    얻은 것이다. 모델 선정 기준, 무엇이 문제였고 지금이라면 어떻게 했을지는 [회고 글](docs/blog/04-retrospective.md)에서 정리한다.
   - 배포는 단일 EC2 + `docker compose` 의 최소 구성이다(RDS·ALB·ECS 없음). 이유와 운영 환경에서의 대안은
     [REFACTORING_LOG](docs/REFACTORING_LOG.md) 의 "운영 환경이라면" 에 정리했다.
   - 알려진 보안·품질 후속 과제(객체 수준 권한 검사, 공개 엔드포인트, 디버그 로그 등)는
     [REFACTORING_LOG](docs/REFACTORING_LOG.md) 의 "이번에 고치지 않은 것" 에 남겼다.
+
+## 글 모음
+
+재배포 과정에서 겪은 문제와 되돌아본 내용을 글로 정리했다. 시간순이며, 마지막 회고는 앞선 글을 읽지 않아도 읽을 수 있다.
+
+| 글 | 내용 |
+|---|---|
+| [깨끗한 DB에서 만난 Prisma 마이그레이션 오류](docs/blog/01-migration-replay.md) | 빈 DB에서 마이그레이션을 처음부터 적용하자 4번째에서 실패한 오류(P3018)와 수정 |
+| [Caddy 라우팅과 브라우저 캐시](docs/blog/02-caddy-routing-cache.md) | `/relationships`가 API로 전달되지 않은 원인(Caddy 경로 매칭)과, 수정 뒤에도 증상이 남은 브라우저 캐시 |
+| [SSH 타임아웃에서 SSM Session Manager 전환까지](docs/blog/03-ssh-to-ssm.md) | 공인 IP가 바뀌어 SSH가 막힌 일, SSM으로 접속 방식을 바꾸고 22번 포트를 닫은 과정 |
+| [회고 - 모델 선정부터 AWS 배포까지](docs/blog/04-retrospective.md) | 캡스톤 때의 모델 선정과 이번 재배포를 나란히 놓고 되짚은 글 |
 
 ## 아키텍처 (AWS 배포 시)
 
@@ -91,6 +102,7 @@ GitHub 의 compare 화면(예: `.../compare/v2-compose...v3-aws-deployed`)으로
 | 문서 | 내용 |
 |---|---|
 | [docs/REFACTORING_LOG.md](docs/REFACTORING_LOG.md) | As-Is → 문제 인식 → To-Be 형식의 작업 기록, 트러블슈팅, 후속 과제 |
+| [docs/blog/](docs/blog/) | 재배포 과정의 문제 해결 글 3편과 회고 (위 "글 모음") |
 | [docs/DEPLOY.md](docs/DEPLOY.md) | AWS 배포 런북과 실제 실행에서 달라진 점 |
 | [docs/evidence/README.md](docs/evidence/README.md) | 배포·철거 스크린샷 목록(무엇을 증명하는지, 어떤 정보를 가렸는지) |
 | [infra/README.md](infra/README.md) | Terraform 구성, SSH 를 닫는 순서 |
