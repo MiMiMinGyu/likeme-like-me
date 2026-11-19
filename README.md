@@ -1,10 +1,11 @@
 # LikemeLikeMe
 
 메신저로 연락이 온 상대의 지난 대화를 참고해, 본인 말투를 학습한 LLM이 적절한 답변 후보를
-생성하고 위치된 휴대폰에서 클릭 한 번으로 전송하는 RAG 기반 캡스톤 프로젝트.
+생성하는 RAG 기반 캡스톤 프로젝트. 운동이나 운전처럼 직접 답장하기 어려운 상황에서 휴대폰으로
+클릭 한 번에 AI가 만든 답장을 보내는 것이 목표였다.
 
 팀 캡스톤으로 끝낸 프로젝트를 **혼자 다시 열어** Docker → Docker Compose → AWS 배포까지
-리팩토링한 저장소다. 이 저장소가 보여 주려는 것은 앱의 말투 재현 품질이 아니라,
+리팩토링했다. 이 저장소에서 보여 주려는 것은 앱의 말투 재현 품질이 아니라,
 **끝난 프로젝트를 인수해 운영 가능한 상태로 옮기는 과정과 그 과정의 판단·사고 기록**이다.
 
 - **backend** — NestJS 11, Prisma, PostgreSQL + pgvector, OpenAI, Telegram(telegraf), JWT
@@ -12,10 +13,21 @@
 - **frontend** — React 19, Vite 7, React Router 7, axios
 - **proxy** — Caddy (SPA 서빙 + API 프록시 + Let's Encrypt 자동 HTTPS)
 
+## 글 모음
+
+재배포 과정에서 겪은 문제와 되돌아본 내용을 글로 정리했다. 시간순이며, 마지막 회고는 앞선 글을 읽지 않아도 읽을 수 있다.
+
+| 글 | 내용 |
+|---|---|
+| [깨끗한 DB에서 만난 Prisma 마이그레이션 오류](docs/blog/01-migration-replay.md) | 빈 DB에서 마이그레이션을 처음부터 적용하자 4번째에서 실패한 오류(P3018)와 수정 |
+| [Caddy 라우팅과 브라우저 캐시](docs/blog/02-caddy-routing-cache.md) | `/relationships`가 API로 전달되지 않은 원인(Caddy 경로 매칭)과, 수정 뒤에도 증상이 남은 브라우저 캐시 |
+| [SSH 타임아웃에서 SSM Session Manager 전환까지](docs/blog/03-ssh-to-ssm.md) | 공인 IP가 바뀌어 SSH가 막힌 일, SSM으로 접속 방식을 바꾸고 22번 포트를 닫은 과정 |
+| [회고 - 모델 선정부터 AWS 배포까지](docs/blog/04-retrospective.md) | 캡스톤 때의 모델 선정과 이번 재배포를 나란히 놓고 되짚은 글 |
+
 ## 현재 상태
 
 - **AWS 배포는 2026-11-12 에 실제로 수행하고 증거를 남긴 뒤 모두 철거했다.** 지금은 접속 가능한 서버가 없다.
-  시연 대신 [배포 증거 스크린샷](docs/evidence/README.md)(40장 이상, 계정 ID 등은 가린 사본)과
+  시연 대신 [배포 증거 스크린샷](docs/evidence/README.md)(48장, 계정 ID 등은 가린 사본)과
   [배포 기록](docs/REFACTORING_LOG.md)으로 확인할 수 있다.
 - 로컬에서는 `docker compose up --build` 로 전체 스택이 뜬다 (아래 "로컬 실행").
 - **한계를 먼저 밝힌다.**
@@ -29,17 +41,6 @@
     [REFACTORING_LOG](docs/REFACTORING_LOG.md) 의 "운영 환경이라면" 에 정리했다.
   - 알려진 보안·품질 후속 과제(객체 수준 권한 검사, 공개 엔드포인트, 디버그 로그 등)는
     [REFACTORING_LOG](docs/REFACTORING_LOG.md) 의 "이번에 고치지 않은 것" 에 남겼다.
-
-## 글 모음
-
-재배포 과정에서 겪은 문제와 되돌아본 내용을 글로 정리했다. 시간순이며, 마지막 회고는 앞선 글을 읽지 않아도 읽을 수 있다.
-
-| 글 | 내용 |
-|---|---|
-| [깨끗한 DB에서 만난 Prisma 마이그레이션 오류](docs/blog/01-migration-replay.md) | 빈 DB에서 마이그레이션을 처음부터 적용하자 4번째에서 실패한 오류(P3018)와 수정 |
-| [Caddy 라우팅과 브라우저 캐시](docs/blog/02-caddy-routing-cache.md) | `/relationships`가 API로 전달되지 않은 원인(Caddy 경로 매칭)과, 수정 뒤에도 증상이 남은 브라우저 캐시 |
-| [SSH 타임아웃에서 SSM Session Manager 전환까지](docs/blog/03-ssh-to-ssm.md) | 공인 IP가 바뀌어 SSH가 막힌 일, SSM으로 접속 방식을 바꾸고 22번 포트를 닫은 과정 |
-| [회고 - 모델 선정부터 AWS 배포까지](docs/blog/04-retrospective.md) | 캡스톤 때의 모델 선정과 이번 재배포를 나란히 놓고 되짚은 글 |
 
 ## 아키텍처 (AWS 배포 시)
 
@@ -63,7 +64,7 @@ likemelikeme/
 │   └── embedding/   # KoSimCSE 임베딩 서비스 (FastAPI, Python)
 ├── infra/           # Terraform (EC2 + EIP + SG + IAM, SSM 접속)
 ├── scripts/         # 시크릿 주입(SSM) · 데이터 이관 스크립트
-├── docs/            # 배포 런북 · 리팩토링 로그 · 증거 스크린샷
+├── docs/            # 배포 런북 · 리팩토링 로그 · 증거 스크린샷 · 글
 ├── docker-compose.yml            # 내부 전용 베이스 (db + embedding + api + web)
 ├── docker-compose.override.yml   # 개발용(포트 노출), 자동 적용
 └── docker-compose.prod.yml       # 운영용(ECR 이미지, 80/443 만 노출)
