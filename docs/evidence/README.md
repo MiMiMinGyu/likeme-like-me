@@ -11,7 +11,7 @@
 | 파일 | 보여주는 것 | 마스킹 | 비고 |
 |---|---|---|---|
 | 01-budgets-guard-10usd.png | 월 $10 비용 예산(`likemelikeme-deploy-guard`) 정상, 알림 2건 | 이메일 주소 검은 박스 | 예산 이름·임계값은 안 보임 |
-| 02-iam-access-key-inactive.png | IAM 사용자 `likemelikeme-deploy` 요약: 액세스 키 Inactive(생성·마지막 사용 62일 전) | ARN 속 계정 ID, 키 ID 검은 박스 | 보안 정리 "이전" 증거. 삭제 후 "이후" 캡처 추가 예정. **"MFA 없이 활성화됨" 경고가 보임 → 공개 전 MFA 설정 또는 해당 부분 제외 결정 필요** |
+| 02-iam-access-key-inactive.png | IAM 사용자 `likemelikeme-deploy` 요약: 액세스 키 Inactive(생성·마지막 사용 62일 전) | ARN 속 계정 ID, 키 ID 검은 박스 | 보안 정리 "이전" 증거. "이후"는 47번. 콘솔 액세스는 "MFA로 활성화됨"으로 표시됨 |
 | 03-ecr-repositories-3.png | ECR 프라이빗 리포지토리 3개 (AES-256) | URI 속 계정 ID 검은 박스 | |
 | 04-ecr-likeme-api-image-index.png | api 이미지 `987809f`, 289.47MB | 없음 | amd64 이미지 풀링 시각 12:03:16 = EC2가 pull한 시각 |
 | 05-ecr-likeme-embedding-image-index.png | embedding 이미지 `987809f`, 744.31MB | 없음 | 위와 동일 |
@@ -56,7 +56,9 @@
 | 45-terraform-destroy-complete.png | `terraform destroy`: 역할 정책 연결·인라인 정책·EIP·인스턴스·인스턴스 프로파일·SG·IAM 역할을 순서대로 삭제, `Destroy complete! Resources: 7 destroyed.` | 없음 (계정 ID 없음, 인스턴스·EIP ID는 삭제된 임시 값) | 의존 순서대로 철거(EIP → 인스턴스 → 프로파일 → SG → 역할) |
 | 46-duckdns-domain-deleted.png | DuckDNS `likemelikeme.duckdns.org deleted`, 도메인 0/5 | 없음 (토큰·IP 없음) | 반환된 EIP 를 가리키는 댕글링 DNS 를 막기 위해 철거 직후 삭제 |
 | 47-iam-access-key-deleted.png | IAM 사용자 보안 자격 증명: "액세스 키가 삭제됨", **액세스 키 (0)**, MFA(패스키 및 보안 키) 1개 유지 | 식별자 칸 전체(ARN 의 계정 ID·MFA 디바이스 식별자) 검은 박스 | **02번(키 Inactive)과 짝**인 보안 정리 "이후" 증거. 장기 키 없이 MFA 로만 접근 |
-| 48-iam-permissions-ecr-only.png | IAM 사용자 권한 정책 (1): `AmazonEC2ContainerRegistryFullAccess`(AWS 관리형, 직접 연결) 하나만 남음 | 없음 (계정 ID·ARN 없음) | AdministratorAccess 를 ECR 전용 최소 권한으로 교체한 "이후" 증거. ECR 삭제 후 이 정책도 제거 예정 |
+| 48-iam-permissions-ecr-only.png | IAM 사용자 권한 정책 (1): `AmazonEC2ContainerRegistryFullAccess`(AWS 관리형, 직접 연결) 하나만 남음 | 없음 (계정 ID·ARN 없음) | AdministratorAccess 를 ECR 전용 최소 권한으로 교체한 "이후" 증거. ECR 삭제 후 이 정책도 제거함(50번) |
+| 49-ecr-repositories-deleted.png | ECR 프라이빗 리포지토리 목록: "리포지토리 없음" | 없음 (계정 ID·URI 없음) | 글 작성 후 ECR 이미지·리포지토리 3개를 콘솔에서 삭제한 "이후" 증거 (2026-11-20). 03번과 짝 |
+| 50-iam-permissions-removed.png | IAM 사용자 권한 정책 (0): "표시할 리소스 없음" | 없음 (계정 ID·ARN 없음) | 48번(ECR 전용 권한 1개)의 "이후". ECR 삭제 뒤 모든 권한 정책을 제거함. MFA 는 유지(47번) |
 | 34-browser-network-relationships-recommendations.png | 수정 후 DevTools: `relationships` **304**(ETag 재검증), `recommendations` **201 / 1.73s**, 콘솔에 요청·응답 로그 | 없음 (JWT는 표준 헤더 접두어만 보임) | RAG+GPT 응답 시간 증거. 노출 주의: `events?token=` URL에 JWT가 쿼리스트링으로 실림(앱 설계상 한계), 운영 번들이 디버그 로그를 출력 |
 
 ## 주의
