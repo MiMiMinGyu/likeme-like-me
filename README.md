@@ -104,6 +104,7 @@ GitHub 의 compare 화면(예: `.../compare/v2-compose...v3-aws-deployed`)으로
 |---|---|
 | [docs/REFACTORING_LOG.md](docs/REFACTORING_LOG.md) | As-Is → 문제 인식 → To-Be 형식의 작업 기록, 트러블슈팅, 후속 과제 |
 | [docs/blog/](docs/blog/) | 재배포 과정의 문제 해결 글 3편과 회고 (위 "글 모음") |
+| [docs/notes/](docs/notes/) | 개인 학습 메모 |
 | [docs/DEPLOY.md](docs/DEPLOY.md) | AWS 배포 런북과 실제 실행에서 달라진 점 |
 | [docs/evidence/README.md](docs/evidence/README.md) | 배포·철거 스크린샷 목록(무엇을 증명하는지, 어떤 정보를 가렸는지) |
 | [infra/README.md](infra/README.md) | Terraform 구성, SSH 를 닫는 순서 |
