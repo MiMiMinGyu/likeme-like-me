@@ -35,6 +35,9 @@ const ChatPage = () => {
     relationshipRef.current = relationship;
   }, [relationship]);
 
+  // 추천 응답이 도착했을 때 아직 같은 대화를 보고 있는지 확인하기 위한 ref
+  const latestPartnerIdRef = useRef(partnerId);
+
   // 메시지/AI 추천 답변이 바뀌어 채팅창 높이가 변할 때마다 바닥으로 스크롤
   const messagesContainerRef = useRef(null);
   useEffect(() => {
@@ -119,6 +122,7 @@ const ChatPage = () => {
   };
 
   const handleGenerateRecommendations = useCallback(async (messageId) => {
+    const requestedPartnerId = partnerId;
     try {
       console.log('🤖 [AI 추천] messageId:', messageId);
       console.log('🤖 [AI 추천] 현재 관계 설정:', relationshipRef.current);
@@ -128,12 +132,17 @@ const ChatPage = () => {
       const result = await telegramAPI.generateRecommendations(messageId);
 
       console.log('🤖 [AI 추천] 생성된 추천 답변:', result.recommendations);
+      // 응답을 기다리는 사이 다른 대화로 옮겼다면 이 응답은 버린다
+      if (latestPartnerIdRef.current !== requestedPartnerId) return;
       setRecommendations(result.recommendations || []);
     } catch (err) {
       console.error('❌ [AI 추천] 실패:', err);
-      setRecommendations([]);
+      if (latestPartnerIdRef.current === requestedPartnerId) setRecommendations([]);
     } finally {
-      setRecommendationLoading(false);
+      // 다른 대화로 옮긴 뒤 도착한 응답이 새 대화의 로딩 표시를 끄지 않도록 한다
+      if (latestPartnerIdRef.current === requestedPartnerId) {
+        setRecommendationLoading(false);
+      }
     }
   }, [partnerId]);
 
@@ -176,6 +185,12 @@ const ChatPage = () => {
   }, [partnerId, handleGenerateRecommendations]);
 
   useEffect(() => {
+    // 대화가 바뀌면 이전 대화에서 만든 추천을 비운다. 새 대화의 마지막 메시지가 내 것이면
+    // 새 추천이 만들어지지 않아서, 비우지 않으면 이전 추천이 그대로 남는다.
+    latestPartnerIdRef.current = partnerId;
+    setRecommendations([]);
+    setRecommendationLoading(false);
+
     fetchConversations();
 
     if (partnerId) {
