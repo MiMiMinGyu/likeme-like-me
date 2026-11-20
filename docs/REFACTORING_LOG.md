@@ -616,7 +616,7 @@ RAG·GPT 는 AWS 상품 선택에 영향 없음 (pgvector 는 같은 컨테이�
 ---
 
 ## 참고
-- 원본 팀 저장소: `github.com/MiMiMinGyu/Capstone2_BE`, `github.com/MiMiMinGyu/Capstone2_FE` (public)
+- 원본 팀 저장소: `github.com/MiMiMinGyu/Capstone2_BE`, `github.com/MiMiMinGyu/Capstone2_FE` (현재 비공개)
 - 로컬 원본 폴더 `likeme-like-me-api/`, `likeme-like-me-web/` (그대로 보존, 삭제는 사용자 판단)
 - 브리핑 원문: `likemelikeme-project-briefing.md` (사용자 보유)
 - 스택: NestJS 11 / Prisma / PostgreSQL+pgvector / OpenAI / Telegram(telegraf) / JWT / (Redis 캐시는 미도입) · React 19 / Vite 7
