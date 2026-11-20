@@ -122,7 +122,7 @@
 |---|---|---|
 | 저장소 구조 | **모노레포** (`apps/api` + `apps/web` + 루트 compose) | 1인 풀스택 유지보수 + 단일 배포 단위 + 포트폴리오 링크 하나 + 리팩토링 서사를 하나의 git log 에 |
 | 원격 | 본인 계정 **신규 private** 레포 (`MiMiMinGyu/likeme-like-me`) | 팀 공용 레포에 개인 작업 섞지 않음. 정리 후 public 으로 전환했다 |
-| 히스토리 | 원본 스냅샷 1커밋 + `v0-original` 태그부터 선형 | 팀 상세 히스토리는 원본 팀 레포·백업 zip 에 보존. before/after 가독성 |
+| 히스토리 | 원본 스냅샷 1커밋 + `v0-original` 태그부터 선형 | 팀 상세 히스토리는 원본 팀 레포에 보존. before/after 가독성 |
 | 스냅샷 기준 | 양쪽 레포 `main` | API `feat/refactoring` 의 `ceb2166`(Redis 캐시 + 임베딩 시각화)는 8개월 갭·영문 커밋·미완성·`LLMy` 오타 포함 → 팀 산출물 아님. Redis 캐싱은 나중에 독립 리팩토링 단계로 제대로 재도입 |
 | 브랜치 전략 | **GitHub Flow** + `refactor/*` `feat/*` `fix/*` `chore/*` `docs/*`, Conventional Commits, 마일스톤 태그 | Git Flow 는 이 규모에 과함 |
 
@@ -338,7 +338,7 @@ RAG·GPT 는 AWS 상품 선택에 영향 없음 (pgvector 는 같은 컨테이�
   샘플은 전화번호·이메일·URL·긴 숫자·시스템 문구·상대 이름이 든 행을 규칙으로 제외하고 카테고리별로 추렸으며,
   본인이 전체를 검토했다. **일부 이름·비속어가 남아 있음을 확인한 상태로 승인**했고 서버는 임시(teardown)다.
   상대 대화 원본·이름 목록은 올리지 않았다. 텔레그램은 비활성(SSM 에서 토큰 삭제).
-- 비용: t3.small 시간당 약 $0.03 + EIP·EBS·ECR 소액, 당일 teardown 이 원칙. 실제 청구액은 Cost Explorer 확인 후 여기에 append.
+- 비용: t3.small 시간당 약 $0.03 + EIP·EBS·ECR 소액, 당일 teardown 이 원칙. 실제 청구액: Cost Explorer 순비용 **$0.00**(2026-11-12~11-20, 서비스·리전별 확인), Budgets 알림 메일 없음. 요금 유형을 "사용"으로만 보면 계정 전체 $0.45(세금 0)이고, 이 프로젝트의 서비스는 EC2-인스턴스 $0.28 + VPC $0.05 + EC2-기타 $0.04 + ECR $0.03 = $0.40, 나머지는 다른 프로젝트의 RDS 스냅샷 $0.05. 크레딧 -$0.45가 전액 상쇄해 청구액은 $0.00. OpenAI 지출은 같은 기간(10월 1일~11월 20일 합계) $0.0064.
 
 ### 트러블슈팅 (증상 → 원인 → 해결)
 
@@ -399,12 +399,12 @@ RAG·GPT 는 AWS 상품 선택에 영향 없음 (pgvector 는 같은 컨테이�
 ### 남은 마무리
 
 - [x] `terraform destroy` → 7개 삭제, AWS 에서 EC2(terminated)·EIP·EBS·SG·IAM 역할 없음 확인 (증거 45)
-- [ ] 다음 날 이후 Cost Explorer $0 수렴 확인 + 실제 청구액 append
+- [x] 다음 날 이후 Cost Explorer $0 수렴 확인 + 실제 청구액 append (2026-11-20: 11-12~11-20 순비용 $0.00, 위 "결과"에 반영)
 - [x] DuckDNS 도메인 삭제(댕글링 DNS 방지, 증거 46), SSM 파라미터 9개 삭제(계정에 0개)
 - [x] IAM: 액세스 키 삭제(증거 47, MFA 는 유지)
 - [x] IAM: `AdministratorAccess` → `AmazonEC2ContainerRegistryFullAccess` 로 교체(ECR 삭제용 최소 권한, 증거 48).
   부작용: 이 권한에는 `signin:CreateOAuth2Token` 이 없어 **`aws login` 기반 CLI 는 토큰 갱신이 안 된다**(콘솔은 정상). ECR 삭제는 콘솔에서 한다.
-- [ ] **글 작성 후** ECR 이미지·리포지토리 3개 삭제 → 그다음 IAM 사용자의 모든 권한 정책 제거(= 마지막 작업)
+- [x] **글 작성 후** ECR 이미지·리포지토리 3개 삭제 → 그다음 IAM 사용자의 모든 권한 정책 제거(= 마지막 작업). 2026-11-20 완료(증거 49·50). MFA 는 유지
 - [x] 태그: 기존 `v3-aws`(배포 준비 완료, 9/10)는 유지하고 실제 배포 시점에 `v3-aws-deployed` 추가
 
 ---
@@ -617,7 +617,6 @@ RAG·GPT 는 AWS 상품 선택에 영향 없음 (pgvector 는 같은 컨테이�
 
 ## 참고
 - 원본 팀 저장소: `github.com/MiMiMinGyu/Capstone2_BE`, `github.com/MiMiMinGyu/Capstone2_FE` (public)
-- 로컬 백업: `c:\Users\awing\projects\academic\likemelikeme-backup.zip`, 원본 폴더
-  `likeme-like-me-api/`, `likeme-like-me-web/` (그대로 보존, 삭제는 사용자 판단)
+- 로컬 원본 폴더 `likeme-like-me-api/`, `likeme-like-me-web/` (그대로 보존, 삭제는 사용자 판단)
 - 브리핑 원문: `likemelikeme-project-briefing.md` (사용자 보유)
 - 스택: NestJS 11 / Prisma / PostgreSQL+pgvector / OpenAI / Telegram(telegraf) / JWT / (Redis 캐시는 미도입) · React 19 / Vite 7
