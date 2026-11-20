@@ -131,6 +131,10 @@ docker compose up --build  # db(pgvector) + embedding(KoSimCSE) + api + web(Cadd
 > `sh scripts/migrate-pg-volume.sh` 를 1회 실행해 새 볼륨으로 이관한다. (자세한 배경은
 > `docs/REFACTORING_LOG.md` 의 "루트 compose" / "트러블슈팅 #1")
 
+> **`port is already allocated` 로 실패한다면** 호스트의 5433 을 다른 프로세스(예: 다른 프로젝트의 Postgres)가
+> 쓰고 있는 것이다. `.env` 에 `DB_HOST_PORT=5434` 처럼 비어 있는 포트를 지정한다.
+> 이 포트는 DBeaver 등 호스트에서 DB 에 직접 접속할 때만 쓰이고, api 는 compose 네트워크로 연결되어 영향이 없다.
+
 ### 개별 앱 (비 Docker)
 
 각 앱의 `.env.example` 을 복사해 `.env` (api) 를 채운 뒤:
